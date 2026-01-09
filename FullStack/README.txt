@@ -32,13 +32,16 @@ CURRENT MODULES:
    - Interaction: "Click-to-Place" insertion mechanics.
 
 4. LEVEL 4 - THE ROUTING FLOOR (BINARY SEARCH TREE)
-   - Logic: Binary Search Tree (Recursive Insertion).
-   - Setting: Automated sorting facility with diverter arms.
-   - Metaphor: Packages travel down a branching conveyor system based on ID value.
+   - Logic: Binary Search Tree (Insertion, In-Order, Pre-Order, Post-Order).
+   - Setting: A high-detail, atmospheric warehouse with animated conveyors.
+   - Metaphor: Packages travel a branching conveyor system based on ID value.
    - Features: 
      - Dynamic Layout Engine: The tree automatically resizes and "zooms out" 
        as it gets deeper to fit the screen.
-     - Anti-Overlap System: Nodes calculate safe spacing to prevent collisions.
+     - Traversal Visualization: A "System Drone" animates the chosen traversal
+       path (In-Order, Pre-Order, Post-Order) by visiting each node.
+     - Scan Manifest: Traversal results are displayed on a thematic paper
+       manifest popup after the drone scan is complete.
 
 DIRECTORY STRUCTURE:
 Full_Stack_Sim/
@@ -62,5 +65,5 @@ CONTROLS (HANDHELD UNIT):
 - LCD Screen: Type Label/ID (Integers for BST).
 - GREEN BUTTON: Add Item (Append, Enqueue, or Inject).
 - RED BUTTON: Remove Item (Depart, Dequeue, or Flush System).
-- BLUE BUTTON: Context specific (Manifest/Insert At).
+- BLUE BUTTON: Context specific (Manifest/Scan).
 - GRAY BUTTON: Skip Animation (Stack/Queue only).
