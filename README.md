@@ -64,3 +64,4 @@ CONTROLS (HANDHELD UNIT):
 - BLUE BUTTON (MANIFEST): Toggles the inventory report overlay.
 - GRAY BUTTON (SKIP ANIM): Instantly finishes all active animations and snaps
   sprites to their logical positions.
+
