@@ -11,19 +11,25 @@ PHASE 2: THE QUEUE (THE WEIGH STATION) - [COMPLETED]
 [x] Logic Fix: Loopback trucks now correctly count towards Arrival/Departure stats.
 [x] Visuals: High-Fidelity Industrial Yard with procedural props.
 [x] Polish: Removed visual artifacts (skid marks) from road corners.
-[x] Feature: "Skip Animation" button.
 
 PHASE 3: LINKED LIST (THE CONVEYOR BELT) - [COMPLETED]
 [x] Metaphor: Re-themed from "Convoy" to "Conveyor Belt" with boxes.
 [x] Logic: Singly Linked List with Insert/Delete At Index.
 [x] Visuals: High-detail warehouse with volumetric lighting.
 [x] Interaction: Implemented intuitive "Click-to-Place" mouse interaction.
-[x] Physics: Added satisfying drop-and-bounce animation for new boxes.
 
-PHASE 4: TREES & SORTING - [NEXT PRIORITY]
-[ ] Binary Search Tree (The Automated Routing Floor).
-    - Visuals: Conveyor belts with diverter arms.
-    - Logic: Recursive insertion and traversal.
-[ ] Sorting Algorithms (The Sorting Floor).
-    - Visuals: Gantry cranes moving containers.
-    - Logic: Bubble Sort / Selection Sort visualization.
+PHASE 4: TREES (THE ROUTING FLOOR) - [COMPLETED]
+[x] Logic: Binary Search Tree insertion.
+[x] Visuals: Top-down view of a sorting facility with diverter arms.
+[x] Smart Layout: Implemented "Smooth Zoom" system.
+    - Tree starts large and readable.
+    - Automatically shrinks and repositions as depth increases.
+    - 50% Fill Rate algorithm guarantees zero overlap at max depth.
+[x] Animation: Packages travel along dynamic paths, following nodes as they resize.
+
+PHASE 5: SORTING ALGORITHMS - [NEXT PRIORITY]
+[ ] The Sorting Floor (Gantry Crane System).
+    - Metaphor: A row of shipping containers.
+    - Logic: Bubble Sort / Selection Sort.
+    - Visuals: An overhead Gantry Crane that picks up and swaps containers.
+    - Highlights: Color-coded comparisons (Red = Compare, Green = Sorted).

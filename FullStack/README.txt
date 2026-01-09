@@ -17,39 +17,41 @@ CURRENT MODULES:
    - Logic: LIFO (Last In, First Out).
    - Setting: A rugged maintenance hangar with textured asphalt floors.
    - Metaphor: A narrow bay where the last truck in blocks the exit.
-   - Animation: Blocking trucks automatically "shuffle" to a holding zone to 
-     release the target vehicle.
-   - Feature: "Skip Animation" button instantly synchronizes the visual state
-     with the logical data structure.
+   - Animation: Blocking trucks automatically "shuffle" to a holding zone.
 
 2. LEVEL 2 - THE WEIGH STATION (QUEUE)
    - Logic: FIFO (First In, First Out).
    - Setting: High-detail Industrial Yard (Asphalt, Fences, Shipping Containers).
    - Metaphor: A highway weigh station.
-   - Animation: If a truck in the middle needs to leave, the trucks in front 
-     drive out, take a "U-Turn Loopback Road," and rejoin the back of the line.
-   - Logic Update: Trucks looping back count as a new Arrival and Departure.
+   - Animation: "Loopback" road for trucks cycling to the back of the line.
 
 3. LEVEL 3 - THE CONVEYOR BELT (LINKED LIST)
    - Logic: Singly Linked List (Insert/Remove at Index).
-   - Setting: An atmospheric factory floor with an animated conveyor belt,
-     textured concrete, and volumetric lighting effects ("god rays").
-   - Metaphor: Boxes on a conveyor represent nodes, linked by a logical chain.
-   - Animation: To insert a box, the user clicks a slot, subsequent boxes shift
-     to create a gap, and the new box drops from a central hopper.
+   - Setting: Factory floor with volumetric lighting ("god rays").
+   - Metaphor: Boxes on a conveyor represent nodes, linked by logical chains.
+   - Interaction: "Click-to-Place" insertion mechanics.
+
+4. LEVEL 4 - THE ROUTING FLOOR (BINARY SEARCH TREE)
+   - Logic: Binary Search Tree (Recursive Insertion).
+   - Setting: Automated sorting facility with diverter arms.
+   - Metaphor: Packages travel down a branching conveyor system based on ID value.
+   - Features: 
+     - Dynamic Layout Engine: The tree automatically resizes and "zooms out" 
+       as it gets deeper to fit the screen.
+     - Anti-Overlap System: Nodes calculate safe spacing to prevent collisions.
 
 DIRECTORY STRUCTURE:
 Full_Stack_Sim/
 ├── main.py                   # Entry Point (Main Menu & Scene Switcher)
-├── settings.py               # Config, Palettes (Industrial/Retro LCD), Physics
-├── assets/                   # (Optional) Folder for custom overrides
+├── settings.py               # Config, Palettes, Physics Constants
 ├── core/                     # Shared Engine Code
-│   ├── sprites.py            # Procedural Asset Generators (Trucks, Boxes, Labels)
-│   └── ui.py                 # Rugged UI System (Handheld Chassis, LCD, Round Buttons)
+│   ├── sprites.py            # Procedural Asset Generators
+│   └── ui.py                 # Rugged UI System
 └── simulation/               # Level Logic
-    ├── site_parking_stack.py # Level 1: Stack Logic (Interior)
-    ├── site_parking_queue.py # Level 2: Queue Logic (Exterior Yard)
-    └── site_conveyor_list.py # Level 3: Linked List Logic (Conveyor)
+    ├── site_parking_stack.py # Level 1: Stack
+    ├── site_parking_queue.py # Level 2: Queue
+    ├── site_conveyor_list.py # Level 3: Linked List
+    └── site_router_tree.py   # Level 4: BST
 
 HOW TO RUN:
 1. Ensure Python 3.x and Pygame are installed (`pip install pygame`).
@@ -57,10 +59,8 @@ HOW TO RUN:
 3. Select a Module from the Main Menu.
 
 CONTROLS (HANDHELD UNIT):
-- LCD Screen: Type Label/ID (e.g., "TRK-123" or "BOX-A").
-- GREEN BUTTON (APPEND/ARRIVE): Adds an item to the structure.
-- BLUE BUTTON (INSERT AT): For Linked List, enters "Placement Mode".
-- RED BUTTON (REMOVE/DEPART): Removes an item by its Label/ID.
-- BLUE BUTTON (MANIFEST): Toggles the inventory report overlay.
-- GRAY BUTTON (SKIP ANIM): Instantly finishes all active animations and snaps
-  sprites to their logical positions.
+- LCD Screen: Type Label/ID (Integers for BST).
+- GREEN BUTTON: Add Item (Append, Enqueue, or Inject).
+- RED BUTTON: Remove Item (Depart, Dequeue, or Flush System).
+- BLUE BUTTON: Context specific (Manifest/Insert At).
+- GRAY BUTTON: Skip Animation (Stack/Queue only).

@@ -121,8 +121,8 @@ class ParkingQueueSimulation:
         btn_cx = self.ui_x + self.ui_w // 2
         self.btn_arrive = RoundButton(btn_cx, 280, 45, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "ENQUEUE", self.action_arrive)
         self.btn_depart = RoundButton(btn_cx, 390, 45, BTN_RED_BASE, BTN_RED_LIGHT, "DEQUEUE", self.action_depart)
-        self.btn_summary = RoundButton(btn_cx, 500, 35, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "MANIFEST", self.action_summary)
-        self.btn_skip = RoundButton(btn_cx, 580, 30, (100, 100, 100), (150, 150, 150), "SKIP ANIM", self.action_skip)
+        self.btn_summary = RoundButton(btn_cx, 500, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "MANIFEST", self.action_summary)
+        self.btn_skip = RoundButton(btn_cx, 590, 30, (100, 100, 100), (150, 150, 150), "SKIP", self.action_skip)
         
         self.visual_queue = []
         self.is_animating = False

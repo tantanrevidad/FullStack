@@ -10,30 +10,25 @@ ARCHITECTURE GUIDELINES
 2. LOGIC LAYER (The Backend)
    - Class: `StackManager` (LIFO) -> Returns `TEMP_POP` / `RESTACK_PUSH` events.
    - Class: `QueueManager` (FIFO) -> Returns `CYCLE` / `DEPART` events.
-     - Note: `CYCLE` events now trigger stats updates (Arrivals/Departures) to reflect
-       the physical movement of the truck re-entering the queue.
    - Class: `LinkedListManager` -> Manages `Node` objects with `next` pointers.
+   - Class: `BSTManager` -> Manages recursive `BSTNode` structure.
+     - Tracks `current_depth` to inform the visualization layer of scaling needs.
    - Responsibility: Pure data manipulation. No Pygame code allowed in these logic classes.
-   - Source of Truth: The Logic Class (`self.items`) is the absolute authority. 
-     Visual sprites are merely representations of this state.
 
 3. VISUALIZATION LAYER (The Frontend)
    - Procedural Generation:
-     - Stack: Draws textured asphalt, corrugated metal walls, and stenciled floor markings.
-     - Queue: Uses "Static Pre-rendering" for high-performance backgrounds. 
-       Generates noise particles, asphalt textures, and scatters props.
-     - Linked List: Pre-renders a high-detail warehouse with textured concrete,
-       volumetric lighting ("god rays"), and shadows.
+     - Stack/Queue: Textured asphalt, corrugated metal, scattered props.
+     - Linked List: Volumetric lighting, animated belts.
+     - BST: Dynamic grid lines, hazard stripes, conveyor paths.
+   - Smart Layout Engine (BST Specific):
+     - Uses a **Recursive 50% Fill Rate** algorithm.
+     - Calculates node size based on `(Screen Width / 2^Depth) * 0.5`.
+     - This guarantees mathematically that nodes can never overlap, regardless of depth.
+     - Implements "Smooth Zoom" using Linear Interpolation (Lerp) for positions.
    - Animation Strategy:
      - Uses **Strict Sequential Processing** and callback-driven event chains.
-     - Animations (dropping, bouncing, sliding, looping) are managed via state
-       machines within the sprites.
-   - Synchronization (The "Skip" Feature):
-     - To implement "Skip Animation", the engine performs a **Hard Reset**:
-       1. Clears all active sprites.
-       2. Reads the current state from the Logic Layer.
-       3. Regenerates fresh sprites at their final calculated positions.
-       4. This prevents "clumping" or desynchronization bugs.
+     - Packages in the BST track *Logical Node Objects* rather than fixed coordinates,
+       allowing them to follow the tree even as it resizes/moves during animation.
 
 4. UI & INTERACTION (The Handheld)
    - Style: Rugged Industrial Scanner (Zebra/Honeywell aesthetic).
@@ -41,5 +36,3 @@ ARCHITECTURE GUIDELINES
      - `HandheldChassis`: Draws the device body with hazard stripes and bolts.
      - `LCDDisplay`: Retro green-screen text input with scanlines.
      - `RoundButton`: Tactile rubber buttons with 3D bevels.
-   - Interaction: Features direct command (Stack/Queue), visual mouse-driven 
-     interaction ("Click-to-Place" in Linked List), and animation control (Skip).
