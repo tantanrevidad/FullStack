@@ -1,0 +1,37 @@
+PROJECT ROADMAP
+
+PHASE 1: THE STACK (VERTICAL MAINTENANCE BAY) - [COMPLETED]
+[x] Core Architecture (MVC Pattern).
+[x] Logic: LIFO Stack with "Shuffle" algorithm.
+[x] UI Overhaul: Integrated Rugged Handheld Interface.
+[x] Feature: "Skip Animation" button for instant state synchronization.
+
+PHASE 2: THE QUEUE (THE WEIGH STATION) - [COMPLETED]
+[x] Logic: FIFO Queue with "Cycling" algorithm (Loopback).
+[x] Logic Fix: Loopback trucks now correctly count towards Arrival/Departure stats.
+[x] Visuals: High-Fidelity Industrial Yard with procedural props.
+[x] Polish: Removed visual artifacts (skid marks) from road corners.
+
+PHASE 3: LINKED LIST (THE CONVEYOR BELT) - [COMPLETED]
+[x] Metaphor: Re-themed from "Convoy" to "Conveyor Belt" with boxes.
+[x] Logic: Singly Linked List with Insert/Delete At Index.
+[x] Visuals: High-detail warehouse with volumetric lighting.
+[x] Interaction: Implemented intuitive "Click-to-Place" mouse interaction.
+
+PHASE 4: TREES (THE ROUTING FLOOR) - [COMPLETED]
+[x] Logic: Binary Search Tree insertion (now handles duplicates).
+[x] Smart Layout: Implemented "Smooth Zoom" system.
+    - Tree starts large and readable.
+    - Automatically shrinks and repositions as depth increases.
+[x] Polishing: Fixed layout, centering, and node clumping issues.
+[x] Feature: Implemented In-Order, Pre-Order, and Post-Order traversals.
+[x] Animation: Added "System Drone" to visualize traversal path.
+[x] UI: Replaced traversal log with a popup "Scan Manifest" report.
+[x] Visuals: Complete graphical overhaul with detailed warehouse environment, animated conveyors, and upgraded drone sprite.
+
+PHASE 5: SORTING ALGORITHMS - [NEXT PRIORITY]
+[ ] The Sorting Floor (Gantry Crane System).
+    - Metaphor: A row of shipping containers.
+    - Logic: Bubble Sort / Selection Sort.
+    - Visuals: An overhead Gantry Crane that picks up and swaps containers.
+    - Highlights: Color-coded comparisons (Red = Compare, Green = Sorted).

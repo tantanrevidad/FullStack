@@ -103,22 +103,26 @@ ARCHITECTURE GUIDELINES
    - Class: `LinkedListManager` -> Manages `Node` objects with `next` pointers.
    - Class: `BSTManager` -> Manages recursive `BSTNode` structure.
      - Tracks `current_depth` to inform the visualization layer of scaling needs.
+     - Contains `in_order`, `pre_order`, `post_order` methods that return a
+       list of `BSTNode` objects, providing a clean data path for animations.
    - Responsibility: Pure data manipulation. No Pygame code allowed in these logic classes.
 
 3. VISUALIZATION LAYER (The Frontend)
    - Procedural Generation:
      - Stack/Queue: Textured asphalt, corrugated metal, scattered props.
      - Linked List: Volumetric lighting, animated belts.
-     - BST: Dynamic grid lines, hazard stripes, conveyor paths.
+     - BST: High-detail warehouse floor with shelves, lighting, and animated
+       conveyor belts with mechanical diverter junctions.
    - Smart Layout Engine (BST Specific):
-     - Uses a **Recursive 50% Fill Rate** algorithm.
-     - Calculates node size based on `(Screen Width / 2^Depth) * 0.5`.
-     - This guarantees mathematically that nodes can never overlap, regardless of depth.
-     - Implements "Smooth Zoom" using Linear Interpolation (Lerp) for positions.
+     - Uses a dynamic layout algorithm to calculate node target positions.
+     - Implements "Smooth Zoom" using Linear Interpolation (Lerp) for both node
+       positions and sizes, ensuring fluid animations as the tree grows.
    - Animation Strategy:
-     - Uses **Strict Sequential Processing** and callback-driven event chains.
-     - Packages in the BST track *Logical Node Objects* rather than fixed coordinates,
-       allowing them to follow the tree even as it resizes/moves during animation.
+     - Uses Strict Sequential Processing and callback-driven event chains.
+     - Packages in the BST track and "attach" to Logical Node Objects, allowing
+       them to follow the tree even as it resizes/moves during animation.
+     - A `DroneSprite` visualizes traversals by sequentially moving to each node
+       in the path provided by the `BSTManager`.
 
 4. UI & INTERACTION (The Handheld)
    - Style: Rugged Industrial Scanner (Zebra/Honeywell aesthetic).
@@ -126,6 +130,10 @@ ARCHITECTURE GUIDELINES
      - `HandheldChassis`: Draws the device body with hazard stripes and bolts.
      - `LCDDisplay`: Retro green-screen text input with scanlines.
      - `RoundButton`: Tactile rubber buttons with 3D bevels.
+   - Popups & Overlays:
+     - Traversal selection is handled via a clean, modal overlay menu.
+     - Traversal results are displayed on a thematic "Scan Manifest" popup,
+       which appears only after the drone animation is complete.
 </file>
 
 <file path="Full_Stack_Sim/assets/__init__.py/__init__.py">
@@ -2398,13 +2406,16 @@ CURRENT MODULES:
    - Interaction: "Click-to-Place" insertion mechanics.
 
 4. LEVEL 4 - THE ROUTING FLOOR (BINARY SEARCH TREE)
-   - Logic: Binary Search Tree (Recursive Insertion).
-   - Setting: Automated sorting facility with diverter arms.
-   - Metaphor: Packages travel down a branching conveyor system based on ID value.
+   - Logic: Binary Search Tree (Insertion, In-Order, Pre-Order, Post-Order).
+   - Setting: A high-detail, atmospheric warehouse with animated conveyors.
+   - Metaphor: Packages travel a branching conveyor system based on ID value.
    - Features: 
      - Dynamic Layout Engine: The tree automatically resizes and "zooms out" 
        as it gets deeper to fit the screen.
-     - Anti-Overlap System: Nodes calculate safe spacing to prevent collisions.
+     - Traversal Visualization: A "System Drone" animates the chosen traversal
+       path (In-Order, Pre-Order, Post-Order) by visiting each node.
+     - Scan Manifest: Traversal results are displayed on a thematic paper
+       manifest popup after the drone scan is complete.
 
 DIRECTORY STRUCTURE:
 Full_Stack_Sim/
@@ -2428,7 +2439,7 @@ CONTROLS (HANDHELD UNIT):
 - LCD Screen: Type Label/ID (Integers for BST).
 - GREEN BUTTON: Add Item (Append, Enqueue, or Inject).
 - RED BUTTON: Remove Item (Depart, Dequeue, or Flush System).
-- BLUE BUTTON: Context specific (Manifest/Insert At).
+- BLUE BUTTON: Context specific (Manifest/Scan).
 - GRAY BUTTON: Skip Animation (Stack/Queue only).
 </file>
 
@@ -2454,13 +2465,15 @@ PHASE 3: LINKED LIST (THE CONVEYOR BELT) - [COMPLETED]
 [x] Interaction: Implemented intuitive "Click-to-Place" mouse interaction.
 
 PHASE 4: TREES (THE ROUTING FLOOR) - [COMPLETED]
-[x] Logic: Binary Search Tree insertion.
-[x] Visuals: Top-down view of a sorting facility with diverter arms.
+[x] Logic: Binary Search Tree insertion (now handles duplicates).
 [x] Smart Layout: Implemented "Smooth Zoom" system.
     - Tree starts large and readable.
     - Automatically shrinks and repositions as depth increases.
-    - 50% Fill Rate algorithm guarantees zero overlap at max depth.
-[x] Animation: Packages travel along dynamic paths, following nodes as they resize.
+[x] Polishing: Fixed layout, centering, and node clumping issues.
+[x] Feature: Implemented In-Order, Pre-Order, and Post-Order traversals.
+[x] Animation: Added "System Drone" to visualize traversal path.
+[x] UI: Replaced traversal log with a popup "Scan Manifest" report.
+[x] Visuals: Complete graphical overhaul with detailed warehouse environment, animated conveyors, and upgraded drone sprite.
 
 PHASE 5: SORTING ALGORITHMS - [NEXT PRIORITY]
 [ ] The Sorting Floor (Gantry Crane System).
