@@ -1,0 +1,137 @@
+# settings.py
+import pygame
+import os
+
+# --- FILE PATHS ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
+
+# --- CONFIGURATION ---
+SCREEN_WIDTH = 1000 
+SCREEN_HEIGHT = 700
+FPS = 60
+
+# --- STANDARD COLORS ---
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+
+# ==========================================
+# THEME: RUGGED HANDHELD UI (Keep this!)
+# ==========================================
+DEVICE_BODY      = (60, 65, 70)
+DEVICE_BEZEL     = (30, 35, 40)
+DEVICE_HIGHLIGHT = (90, 95, 100)
+BOLT_COLOR       = (180, 180, 185)
+STRIPE_YELLOW    = (255, 190, 0)
+STRIPE_BLACK     = (20, 20, 20)
+LCD_BG           = (0, 40, 40)
+LCD_TEXT_MAIN    = (50, 255, 200)
+LCD_TEXT_DIM     = (0, 150, 120)
+LCD_SCANLINE     = (0, 20, 20)
+BTN_GREEN_BASE   = (0, 160, 60)
+BTN_GREEN_LIGHT  = (50, 200, 100)
+BTN_RED_BASE     = (180, 40, 40)
+BTN_RED_LIGHT    = (220, 80, 80)
+BTN_BLUE_BASE    = (40, 100, 180)
+BTN_BLUE_LIGHT   = (80, 140, 220)
+BTN_SHADOW       = (20, 25, 30)
+
+# ==========================================
+# PALETTE B: INDUSTRIAL YARD (NEW!)
+# ==========================================
+# Ground
+YARD_CONCRETE    = (130, 130, 135) # Main floor
+YARD_NOISE_1     = (120, 120, 125) # Darker specks
+YARD_NOISE_2     = (140, 140, 145) # Lighter specks
+
+# Roads
+ASPHALT_BASE     = (60, 60, 65)    # Worn road
+ASPHALT_DARK     = (40, 40, 45)    # Fresh road/Patch
+TIRE_MARKS       = (30, 30, 35)    # Skid marks
+ROAD_STRIPE      = (200, 200, 200) # Faded white lines
+
+# Buildings
+BRICK_RED        = (130, 70, 60)   # Guard shack
+BRICK_DETAIL     = (110, 50, 40)
+ROOF_TAR         = (50, 50, 55)
+WAREHOUSE_WALL   = (180, 185, 190) # Corrugated metal
+WAREHOUSE_ROOF   = (100, 105, 110)
+
+# Details
+BOLLARD_YELLOW   = (220, 180, 20)
+SHADOW_COLOR     = (0, 0, 0, 60)
+
+CONTAINER_RED    = (160, 50, 40)
+CONTAINER_BLUE   = (40, 80, 140)
+CONTAINER_GREEN  = (50, 100, 60)
+CONTAINER_RIB    = (0, 0, 0, 50)   # Shadow for ribs
+
+BARREL_BLUE      = (30, 60, 100)
+BARREL_RIM       = (150, 150, 160)
+
+FENCE_COLOR      = (180, 180, 180)
+FENCE_SHADOW     = (0, 0, 0, 80)
+
+DRAIN_METAL      = (70, 70, 75)
+OIL_STAIN        = (30, 30, 30, 100) # Alpha needed
+CRACK_COLOR      = (80, 80, 85)
+
+# ==========================================
+# PALETTE A: STACK LEVEL (Keep existing)
+# ==========================================
+FLOOR_COLOR = (115, 118, 122)      
+WALL_TOP_COLOR = (210, 215, 220)   
+WALL_SIDE_COLOR = (80, 85, 90)     
+PARKING_LINE_COLOR = (240, 240, 245) 
+
+ASPHALT_STACK_BASE = (70, 72, 75)
+ASPHALT_STACK_NOISE = (60, 62, 65)
+WALL_CORRUGATED_DARK = (50, 55, 60)
+WALL_CORRUGATED_LIGHT = (65, 70, 75)
+CONTROL_ROOM_GLOW = (180, 220, 230, 50) # Transparent blue-white
+STENCIL_TEXT_COLOR = (255, 255, 255, 60) # Worn, transparent white
+
+# SHARED ASSETS
+TRUCK_CAB_WHITE = (245, 245, 250)
+TRUCK_CHASSIS = (50, 50, 55)
+WINDSHIELD = (40, 44, 50)          
+TIRE_COLOR = (20, 20, 20)
+BOX_COLOR_1 = (205, 133, 63)  
+BOX_COLOR_2 = (222, 184, 135) 
+BOX_TAPE    = (190, 120, 50)  
+
+# Dimensions & Physics
+CRATE_WIDTH = 45  
+CRATE_HEIGHT = 90
+PARKING_GAP = 10 
+LERP_FACTOR = 0.12  
+MIN_SPEED = 1.5     
+
+# Locations
+SPAWN_X = -100 
+SPAWN_Y = SCREEN_HEIGHT - CRATE_HEIGHT - 40
+RECEIVING_BAY_X = 100
+RECEIVING_BAY_Y = SCREEN_HEIGHT - CRATE_HEIGHT - 40
+STACK_ZONE_X = 300
+STACK_ZONE_BASE_Y = SCREEN_HEIGHT - 60 
+HOLDING_ZONE_X = 550
+HOLDING_ZONE_Y = SCREEN_HEIGHT - 60
+SHIPPING_BAY_X = -150
+SHIPPING_BAY_Y = SCREEN_HEIGHT - CRATE_HEIGHT - 250
+
+# ==========================================
+# PALETTE C: LINKED LIST LEVEL (Keep existing)
+# ==========================================
+WAREHOUSE_PILLAR = (110, 120, 125)
+SHELF_COLOR = (180, 140, 100)
+CEILING_TRUSS = (70, 75, 80)
+FLUORESCENT_LIGHT = (220, 230, 240)
+HOPPER_METAL = (140, 145, 150)
+HOPPER_SHADOW = (100, 105, 110)
+
+CONCRETE_NOISE_1 = (110, 113, 117)
+CONCRETE_NOISE_2 = (120, 123, 127)
+WALL_BASE_COLOR = (130, 135, 140)
+WALL_LINE_COLOR = (120, 125, 130)
+LIGHT_RAY_COLOR = (255, 255, 220, 20) # Very transparent yellow-white
+STATIC_SHADOW_COLOR = (0, 0, 0, 40) # Transparent black for pre-rendered shadows
