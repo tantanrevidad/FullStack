@@ -1,0 +1,2473 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+The content has been processed where comments have been removed, empty lines have been removed, security check has been disabled.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Code comments have been removed from supported file types
+- Empty lines have been removed from all files
+- Security check has been disabled - content may contain sensitive information
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+ARCHITECTURE.txt/
+  ARCHITECTURE.txt
+Full_Stack_Sim/
+  assets/
+    __init__.py/
+      __init__.py
+    parking_bg.png/
+      parking_bg.png
+    truck.png/
+      truck.png
+  core/
+    __init__.py/
+      __init__.py
+    sprites.py/
+      sprites.py
+    ui.py/
+      ui.py
+  main.py/
+    main.py
+  settings.py/
+    settings.py
+  simulation/
+    __init__.py/
+      __init__.py
+    site_conveyor_list.py/
+      site_conveyor_list.py
+    site_parking_queue.py/
+      site_parking_queue.py
+    site_parking_stack.py/
+      site_parking_stack.py
+    site_router_tree.py/
+      site_router_tree.py
+FullStack Project Bible.ipynb/
+  FullStack Project Bible.ipynb
+README.txt/
+  README.txt
+ROADMAP.txt/
+  ROADMAP.txt
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="ARCHITECTURE.txt/ARCHITECTURE.txt">
+ARCHITECTURE GUIDELINES
+
+1. MODULAR DESIGN
+   - Core Engine (`core/`): Rendering engines (`sprites.py`) and UI system (`ui.py`).
+   - Simulation Modules (`simulation/`): Self-contained "Site" files. Each site file
+     encapsulates both the specific data structure logic and its corresponding
+     Pygame visualization class for improved modularity.
+   - Controller (`main.py`): State Machine to switch between Menu and simulation sites.
+
+2. LOGIC LAYER (The Backend)
+   - Class: `StackManager` (LIFO) -> Returns `TEMP_POP` / `RESTACK_PUSH` events.
+   - Class: `QueueManager` (FIFO) -> Returns `CYCLE` / `DEPART` events.
+   - Class: `LinkedListManager` -> Manages `Node` objects with `next` pointers.
+   - Class: `BSTManager` -> Manages recursive `BSTNode` structure.
+     - Tracks `current_depth` to inform the visualization layer of scaling needs.
+   - Responsibility: Pure data manipulation. No Pygame code allowed in these logic classes.
+
+3. VISUALIZATION LAYER (The Frontend)
+   - Procedural Generation:
+     - Stack/Queue: Textured asphalt, corrugated metal, scattered props.
+     - Linked List: Volumetric lighting, animated belts.
+     - BST: Dynamic grid lines, hazard stripes, conveyor paths.
+   - Smart Layout Engine (BST Specific):
+     - Uses a **Recursive 50% Fill Rate** algorithm.
+     - Calculates node size based on `(Screen Width / 2^Depth) * 0.5`.
+     - This guarantees mathematically that nodes can never overlap, regardless of depth.
+     - Implements "Smooth Zoom" using Linear Interpolation (Lerp) for positions.
+   - Animation Strategy:
+     - Uses **Strict Sequential Processing** and callback-driven event chains.
+     - Packages in the BST track *Logical Node Objects* rather than fixed coordinates,
+       allowing them to follow the tree even as it resizes/moves during animation.
+
+4. UI & INTERACTION (The Handheld)
+   - Style: Rugged Industrial Scanner (Zebra/Honeywell aesthetic).
+   - Components: 
+     - `HandheldChassis`: Draws the device body with hazard stripes and bolts.
+     - `LCDDisplay`: Retro green-screen text input with scanlines.
+     - `RoundButton`: Tactile rubber buttons with 3D bevels.
+</file>
+
+<file path="Full_Stack_Sim/assets/__init__.py/__init__.py">
+
+</file>
+
+<file path="Full_Stack_Sim/core/__init__.py/__init__.py">
+
+</file>
+
+<file path="Full_Stack_Sim/core/sprites.py/sprites.py">
+import pygame
+import math
+import random
+from settings import *
+class CrateSprite(pygame.sprite.Sprite):
+    def __init__(self, x, y, data_label):
+        super().__init__()
+        self.plate = str(data_label)
+        self.pos_x = float(x)
+        self.pos_y = float(y)
+        self.target_x = float(x)
+        self.target_y = float(y)
+        self.angle = 0
+        self.is_moving = False
+        self.on_finish_callback = None
+        self.cargo_layout = []
+        for _ in range(6):
+            if random.random() > 0.3:
+                self.cargo_layout.append(random.choice([1, 2]))
+            else:
+                self.cargo_layout.append(0)
+        self.original_image = self.generate_truck_surface()
+        self.image = self.original_image.copy()
+        self.label_surf = self.generate_label()
+        self.rect = self.image.get_rect()
+        self.rect.center = (x, y)
+    def generate_truck_surface(self):
+        w, h = CRATE_HEIGHT, CRATE_WIDTH
+        surf = pygame.Surface((w + 10, h + 10), pygame.SRCALPHA)
+        ox, oy = 5, 5
+        shadow_rect = pygame.Rect(ox + 4, oy + 4, w, h)
+        pygame.draw.rect(surf, (0, 0, 0, 60), shadow_rect, border_radius=4)
+        tire_w, tire_h = 14, 6
+        pygame.draw.rect(surf, TIRE_COLOR, (ox + w - 24, oy - 2, tire_w, tire_h))
+        pygame.draw.rect(surf, TIRE_COLOR, (ox + w - 24, oy + h - 4, tire_w, tire_h))
+        pygame.draw.rect(surf, TIRE_COLOR, (ox + 8, oy - 2, tire_w, tire_h))
+        pygame.draw.rect(surf, TIRE_COLOR, (ox + 8, oy + h - 4, tire_w, tire_h))
+        bed_length = w * 0.72
+        bed_rect = pygame.Rect(ox, oy, bed_length, h)
+        pygame.draw.rect(surf, TRUCK_CHASSIS, bed_rect, border_radius=2)
+        pygame.draw.rect(surf, (70, 70, 75), (ox, oy + 2, bed_length, h-4), 1)
+        box_size = (h - 8) // 2
+        start_x = ox + 2
+        for i, box_type in enumerate(self.cargo_layout):
+            if box_type == 0: continue
+            col = i % 2
+            row = i // 2
+            bx = start_x + (row * (box_size + 2))
+            by = oy + 4 + (col * box_size)
+            color = BOX_COLOR_1 if box_type == 1 else BOX_COLOR_2
+            box_rect = pygame.Rect(bx, by, box_size - 2, box_size - 2)
+            pygame.draw.rect(surf, color, box_rect)
+            pygame.draw.rect(surf, (0, 0, 0, 50), box_rect, 1)
+            pygame.draw.line(surf, BOX_TAPE, box_rect.midleft, box_rect.midright, 2)
+        pygame.draw.rect(surf, (30, 30, 30), (ox + bed_length - 2, oy + h//2 - 3, 6, 6))
+        cab_x = ox + bed_length + 2
+        cab_w = w - bed_length - 2
+        cab_rect = pygame.Rect(cab_x, oy, cab_w, h)
+        pygame.draw.rect(surf, TRUCK_CAB_WHITE, cab_rect, border_radius=3)
+        ws_width = 10
+        ws_height = h - 6
+        ws_rect = pygame.Rect(cab_x + cab_w - 14, oy + 3, ws_width, ws_height)
+        pygame.draw.rect(surf, WINDSHIELD, ws_rect, border_radius=2)
+        pygame.draw.line(surf, (100, 120, 130), (ws_rect.right-2, ws_rect.top+2), (ws_rect.right-2, ws_rect.bottom-2), 1)
+        pygame.draw.rect(surf, (20, 20, 20), (cab_x + cab_w - 12, oy - 2, 4, 3))
+        pygame.draw.rect(surf, (20, 20, 20), (cab_x + cab_w - 12, oy + h - 1, 4, 3))
+        pygame.draw.rect(surf, (255, 200, 50), (ox + w - 2, oy + 2, 2, 4))
+        pygame.draw.rect(surf, (255, 200, 50), (ox + w - 2, oy + h - 6, 2, 4))
+        return surf
+    def generate_label(self):
+        font = pygame.font.SysFont("Arial", 10, bold=True)
+        raw_text = font.render(self.plate, True, (20, 20, 20))
+        padding_x, padding_y = 4, 2
+        w = raw_text.get_width() + padding_x * 2
+        h = raw_text.get_height() + padding_y * 2
+        surf = pygame.Surface((w, h))
+        surf.fill((255, 255, 255))
+        pygame.draw.rect(surf, (0, 0, 0), surf.get_rect(), 1)
+        surf.blit(raw_text, (padding_x, padding_y))
+        return surf
+    def move_to(self, target_pos, callback=None):
+        self.target_x, self.target_y = target_pos
+        dx = self.target_x - self.pos_x
+        dy = self.target_y - self.pos_y
+        if abs(dx) > 1 or abs(dy) > 1:
+            radians = math.atan2(-dy, dx)
+            self.angle = math.degrees(radians)
+        self.on_finish_callback = callback
+        self.is_moving = True
+    def update(self):
+        if not self.is_moving: return
+        dx = self.target_x - self.pos_x
+        dy = self.target_y - self.pos_y
+        dist = math.sqrt(dx**2 + dy**2)
+        if dist < MIN_SPEED:
+            self.pos_x = self.target_x
+            self.pos_y = self.target_y
+            self.is_moving = False
+            self.angle = round(self.angle / 90) * 90
+            if self.on_finish_callback:
+                cb = self.on_finish_callback
+                self.on_finish_callback = None
+                cb()
+        else:
+            self.pos_x += dx * LERP_FACTOR
+            self.pos_y += dy * LERP_FACTOR
+            if abs(dx * LERP_FACTOR) < 0.5 and abs(dx) > 0: self.pos_x += (dx/abs(dx)) * 0.5
+            if abs(dy * LERP_FACTOR) < 0.5 and abs(dy) > 0: self.pos_y += (dy/abs(dy)) * 0.5
+        self.rect.center = (int(self.pos_x), int(self.pos_y))
+        self.image = pygame.transform.rotate(self.original_image, self.angle)
+        self.rect = self.image.get_rect(center=self.rect.center)
+</file>
+
+<file path="Full_Stack_Sim/core/ui.py/ui.py">
+import pygame
+import math
+from settings import *
+class HandheldChassis:
+    def __init__(self, x, y, w, h):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.inner_rect = self.rect.inflate(-20, -20)
+    def draw(self, screen):
+        shadow_rect = self.rect.copy()
+        shadow_rect.y += 5
+        pygame.draw.rect(screen, (20, 20, 25), shadow_rect, border_radius=30)
+        pygame.draw.rect(screen, DEVICE_BODY, self.rect, border_radius=30)
+        pygame.draw.rect(screen, DEVICE_HIGHLIGHT, self.rect, width=3, border_radius=30)
+        self._draw_hazard_stripes(screen, self.rect.left, self.rect.top + 40, 15, self.rect.height - 80)
+        self._draw_hazard_stripes(screen, self.rect.right - 15, self.rect.top + 40, 15, self.rect.height - 80)
+        self._draw_bolt(screen, self.rect.left + 20, self.rect.top + 20)
+        self._draw_bolt(screen, self.rect.right - 20, self.rect.top + 20)
+        self._draw_bolt(screen, self.rect.left + 20, self.rect.bottom - 20)
+        self._draw_bolt(screen, self.rect.right - 20, self.rect.bottom - 20)
+    def _draw_hazard_stripes(self, screen, x, y, w, h):
+        bg_rect = pygame.Rect(x, y, w, h)
+        pygame.draw.rect(screen, STRIPE_BLACK, bg_rect)
+        clip_rect = bg_rect
+        screen.set_clip(clip_rect)
+        stripe_width = 10
+        gap = 10
+        for i in range(-20, h + 20, stripe_width + gap):
+            p1 = (x, y + i)
+            p2 = (x + w, y + i + 10)
+            p3 = (x + w, y + i + 10 + stripe_width)
+            p4 = (x, y + i + stripe_width)
+            pygame.draw.polygon(screen, STRIPE_YELLOW, [p1, p2, p3, p4])
+        screen.set_clip(None)
+        pygame.draw.rect(screen, (0,0,0), bg_rect, 2)
+    def _draw_bolt(self, screen, x, y):
+        pygame.draw.circle(screen, (50, 50, 50), (x, y+2), 7)
+        pygame.draw.circle(screen, BOLT_COLOR, (x, y), 6)
+        pygame.draw.circle(screen, (100, 100, 100), (x, y), 2)
+        pygame.draw.line(screen, (100, 100, 100), (x-3, y), (x+3, y), 1)
+        pygame.draw.line(screen, (100, 100, 100), (x, y-3), (x, y+3), 1)
+class LCDDisplay:
+    def __init__(self, x, y, w, h):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.text = ""
+        self.status_msg = "SYSTEM READY"
+        self.font_large = pygame.font.SysFont("Consolas", 24, bold=True)
+        self.font_small = pygame.font.SysFont("Consolas", 12)
+        self.active = True
+        self.cursor_blink = 0
+    def handle_event(self, event):
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_BACKSPACE:
+                self.text = self.text[:-1]
+            elif event.key == pygame.K_RETURN:
+                return self.text
+            else:
+                if len(self.text) < 12:
+                    if event.unicode.isalnum() or event.unicode in ':-':
+                        self.text += event.unicode.upper()
+        return None
+    def update_status(self, msg):
+        self.status_msg = msg
+    def update(self):
+        self.cursor_blink += 1
+    def draw(self, screen):
+        pygame.draw.rect(screen, (10, 15, 20), self.rect, border_radius=5)
+        screen_rect = self.rect.inflate(-10, -10)
+        pygame.draw.rect(screen, LCD_BG, screen_rect, border_radius=3)
+        for i in range(screen_rect.top, screen_rect.bottom, 4):
+            pygame.draw.line(screen, LCD_SCANLINE, (screen_rect.left, i), (screen_rect.right, i), 1)
+        status_surf = self.font_small.render(self.status_msg, True, LCD_TEXT_DIM)
+        screen.blit(status_surf, (screen_rect.x + 10, screen_rect.y + 8))
+        txt_surf = self.font_large.render(self.text, True, LCD_TEXT_MAIN)
+        txt_x = screen_rect.centerx - txt_surf.get_width() // 2
+        txt_y = screen_rect.centery - 5
+        screen.blit(txt_surf, (txt_x, txt_y))
+        if (self.cursor_blink // 30) % 2 == 0:
+            cursor_x = txt_x + txt_surf.get_width() + 2
+            pygame.draw.rect(screen, LCD_TEXT_MAIN, (cursor_x, txt_y, 10, 24))
+        pygame.draw.line(screen, (255, 255, 255, 20), (screen_rect.right - 30, screen_rect.top), (screen_rect.right, screen_rect.top + 30), 2)
+class RoundButton:
+    def __init__(self, cx, cy, radius, color_base, color_light, text, callback):
+        self.center = (cx, cy)
+        self.radius = radius
+        self.rect = pygame.Rect(cx - radius, cy - radius, radius*2, radius*2)
+        self.color_base = color_base
+        self.color_light = color_light
+        self.text = text
+        self.callback = callback
+        self.font = pygame.font.SysFont("Arial", 14, bold=True)
+        self.is_hovered = False
+        self.is_pressed = False
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEMOTION:
+            dx = event.pos[0] - self.center[0]
+            dy = event.pos[1] - self.center[1]
+            if math.sqrt(dx*dx + dy*dy) <= self.radius:
+                self.is_hovered = True
+            else:
+                self.is_hovered = False
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.is_hovered and event.button == 1:
+                self.is_pressed = True
+        if event.type == pygame.MOUSEBUTTONUP:
+            if self.is_pressed and self.is_hovered:
+                self.is_pressed = False
+                return self.callback()
+            self.is_pressed = False
+    def draw(self, screen):
+        cx, cy = self.center
+        r = self.radius
+        offset_y = 4 if not self.is_pressed else 0
+        pygame.draw.circle(screen, BTN_SHADOW, (cx, cy + 6), r + 2)
+        pygame.draw.circle(screen, (self.color_base[0]//2, self.color_base[1]//2, self.color_base[2]//2), (cx, cy + offset_y + 4), r)
+        pygame.draw.circle(screen, self.color_base, (cx, cy + offset_y), r)
+        pygame.draw.circle(screen, self.color_light, (cx, cy + offset_y - 2), r - 4)
+        pygame.draw.circle(screen, self.color_base, (cx, cy + offset_y + 2), r - 4)
+        txt_surf = self.font.render(self.text, True, (255, 255, 255))
+        txt_rect = txt_surf.get_rect(center=(cx, cy + offset_y))
+        shadow_surf = self.font.render(self.text, True, (0, 0, 0, 100))
+        screen.blit(shadow_surf, (txt_rect.x + 1, txt_rect.y + 1))
+        screen.blit(txt_surf, txt_rect)
+        if self.is_hovered and not self.is_pressed:
+            pygame.draw.circle(screen, (255, 255, 255), (cx, cy + offset_y), r, 2)
+class Button:
+    def __init__(self, x, y, w, h, text, callback_func):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.text = text
+        self.callback = callback_func
+        self.font = pygame.font.SysFont("Arial", 12, bold=True)
+        self.is_hovered = False
+        self.is_pressed = False
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEMOTION:
+            self.is_hovered = self.rect.collidepoint(event.pos)
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.is_hovered and event.button == 1:
+                self.is_pressed = True
+        if event.type == pygame.MOUSEBUTTONUP:
+            if self.is_pressed and self.is_hovered:
+                self.is_pressed = False
+                return self.callback()
+            self.is_pressed = False
+    def draw(self, screen):
+        base_color = (60, 70, 80)
+        hover_color = (80, 90, 100)
+        press_color = (40, 50, 60)
+        color = base_color
+        if self.is_hovered: color = hover_color
+        if self.is_pressed: color = press_color
+        shadow_rect = self.rect.copy()
+        shadow_rect.y += 3
+        pygame.draw.rect(screen, (30, 35, 40), shadow_rect, border_radius=3)
+        btn_rect = self.rect.copy()
+        if self.is_pressed:
+            btn_rect.y += 2
+        pygame.draw.rect(screen, color, btn_rect, border_radius=3)
+        pygame.draw.rect(screen, (255, 200, 0), (btn_rect.x, btn_rect.y, 5, btn_rect.height), border_top_left_radius=3, border_bottom_left_radius=3)
+        pygame.draw.line(screen, (255, 255, 255, 50), btn_rect.topleft, btn_rect.topright, 1)
+        text_surf = self.font.render(self.text, True, (255, 255, 255))
+        text_rect = text_surf.get_rect(center=btn_rect.center)
+        screen.blit(text_surf, text_rect)
+</file>
+
+<file path="Full_Stack_Sim/main.py/main.py">
+import pygame
+import sys
+from settings import *
+from core.ui import Button
+from simulation.site_parking_stack import ParkingStackSimulation
+from simulation.site_parking_queue import ParkingQueueSimulation
+from simulation.site_conveyor_list import ConveyorSimulation
+from simulation.site_router_tree import RouterTreeSimulation
+class MainMenu:
+    def __init__(self, screen, switch_callback):
+        self.screen = screen
+        self.switch_callback = switch_callback
+        self.title_font = pygame.font.SysFont("Impact", 60)
+        self.sub_font = pygame.font.SysFont("Arial", 16)
+        btn_w = 300
+        btn_h = 50
+        center_x = SCREEN_WIDTH // 2 - btn_w // 2
+        start_y = 300
+        gap = 70
+        self.btn_stack = Button(center_x, start_y, btn_w, btn_h, "SITE A: MAINTENANCE BAY (STACK)",
+                                lambda: self.switch_callback("STACK"))
+        self.btn_queue = Button(center_x, start_y + gap, btn_w, btn_h, "SITE B: WEIGH STATION (QUEUE)",
+                                lambda: self.switch_callback("QUEUE"))
+        self.btn_conveyor = Button(center_x, start_y + gap*2, btn_w, btn_h, "SITE C: CONVEYOR BELT (LINKED LIST)",
+                                lambda: self.switch_callback("CONVEYOR"))
+        self.btn_tree = Button(center_x, start_y + gap*3, btn_w, btn_h, "SITE D: ROUTING FLOOR (BST)",
+                                lambda: self.switch_callback("TREE"))
+        self.btn_quit = Button(center_x, start_y + gap*4, btn_w, btn_h, "EXIT SYSTEM",
+                               lambda: self.switch_callback("QUIT"))
+    def handle_events(self, event):
+        self.btn_stack.handle_event(event)
+        self.btn_queue.handle_event(event)
+        self.btn_conveyor.handle_event(event)
+        self.btn_tree.handle_event(event)
+        self.btn_quit.handle_event(event)
+    def update(self):
+        pass
+    def draw(self):
+        self.screen.fill((20, 24, 28))
+        title_surf = self.title_font.render("FULL STACK LOGISTICS", True, (220, 220, 225))
+        sub_surf = self.sub_font.render("DATA STRUCTURE VISUALIZATION SUITE", True, (100, 150, 200))
+        self.screen.blit(title_surf, (SCREEN_WIDTH//2 - title_surf.get_width()//2, 150))
+        self.screen.blit(sub_surf, (SCREEN_WIDTH//2 - sub_surf.get_width()//2, 220))
+        self.btn_stack.draw(self.screen)
+        self.btn_queue.draw(self.screen)
+        self.btn_conveyor.draw(self.screen)
+        self.btn_tree.draw(self.screen)
+        self.btn_quit.draw(self.screen)
+def main():
+    pygame.init()
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    pygame.display.set_caption("Full Stack Logistics Simulator")
+    clock = pygame.time.Clock()
+    current_scene = None
+    def switch_scene(scene_name):
+        nonlocal current_scene
+        if scene_name == "MENU":
+            current_scene = MainMenu(screen, switch_scene)
+        elif scene_name in ["STACK", "QUEUE", "CONVEYOR", "TREE"]:
+            if scene_name == "STACK":
+                current_scene = ParkingStackSimulation(screen)
+            elif scene_name == "QUEUE":
+                current_scene = ParkingQueueSimulation(screen)
+            elif scene_name == "CONVEYOR":
+                current_scene = ConveyorSimulation(screen)
+            elif scene_name == "TREE":
+                current_scene = RouterTreeSimulation(screen)
+            back_btn = Button(10, 10, 100, 30, "< MENU", lambda: switch_scene("MENU"))
+            original_handle = current_scene.handle_events
+            original_draw = current_scene.draw
+            def new_handle(event):
+                back_btn.handle_event(event)
+                original_handle(event)
+            def new_draw():
+                original_draw()
+                back_btn.draw(screen)
+            current_scene.handle_events = new_handle
+            current_scene.draw = new_draw
+        elif scene_name == "QUIT":
+            pygame.quit()
+            sys.exit()
+    switch_scene("MENU")
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            if current_scene:
+                current_scene.handle_events(event)
+        if current_scene:
+            current_scene.update()
+            current_scene.draw()
+        pygame.display.flip()
+        clock.tick(FPS)
+    pygame.quit()
+    sys.exit()
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="Full_Stack_Sim/settings.py/settings.py">
+import pygame
+import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
+SCREEN_WIDTH = 1000
+SCREEN_HEIGHT = 700
+FPS = 60
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+DEVICE_BODY      = (60, 65, 70)
+DEVICE_BEZEL     = (30, 35, 40)
+DEVICE_HIGHLIGHT = (90, 95, 100)
+BOLT_COLOR       = (180, 180, 185)
+STRIPE_YELLOW    = (255, 190, 0)
+STRIPE_BLACK     = (20, 20, 20)
+LCD_BG           = (0, 40, 40)
+LCD_TEXT_MAIN    = (50, 255, 200)
+LCD_TEXT_DIM     = (0, 150, 120)
+LCD_SCANLINE     = (0, 20, 20)
+BTN_GREEN_BASE   = (0, 160, 60)
+BTN_GREEN_LIGHT  = (50, 200, 100)
+BTN_RED_BASE     = (180, 40, 40)
+BTN_RED_LIGHT    = (220, 80, 80)
+BTN_BLUE_BASE    = (40, 100, 180)
+BTN_BLUE_LIGHT   = (80, 140, 220)
+BTN_SHADOW       = (20, 25, 30)
+YARD_CONCRETE    = (130, 130, 135)
+YARD_NOISE_1     = (120, 120, 125)
+YARD_NOISE_2     = (140, 140, 145)
+ASPHALT_BASE     = (60, 60, 65)
+ASPHALT_DARK     = (40, 40, 45)
+TIRE_MARKS       = (30, 30, 35)
+ROAD_STRIPE      = (200, 200, 200)
+BRICK_RED        = (130, 70, 60)
+BRICK_DETAIL     = (110, 50, 40)
+ROOF_TAR         = (50, 50, 55)
+WAREHOUSE_WALL   = (180, 185, 190)
+WAREHOUSE_ROOF   = (100, 105, 110)
+BOLLARD_YELLOW   = (220, 180, 20)
+SHADOW_COLOR     = (0, 0, 0, 60)
+CONTAINER_RED    = (160, 50, 40)
+CONTAINER_BLUE   = (40, 80, 140)
+CONTAINER_GREEN  = (50, 100, 60)
+CONTAINER_RIB    = (0, 0, 0, 50)
+BARREL_BLUE      = (30, 60, 100)
+BARREL_RIM       = (150, 150, 160)
+FENCE_COLOR      = (180, 180, 180)
+FENCE_SHADOW     = (0, 0, 0, 80)
+DRAIN_METAL      = (70, 70, 75)
+OIL_STAIN        = (30, 30, 30, 100)
+CRACK_COLOR      = (80, 80, 85)
+FLOOR_COLOR = (115, 118, 122)
+WALL_TOP_COLOR = (210, 215, 220)
+WALL_SIDE_COLOR = (80, 85, 90)
+PARKING_LINE_COLOR = (240, 240, 245)
+ASPHALT_STACK_BASE = (70, 72, 75)
+ASPHALT_STACK_NOISE = (60, 62, 65)
+WALL_CORRUGATED_DARK = (50, 55, 60)
+WALL_CORRUGATED_LIGHT = (65, 70, 75)
+CONTROL_ROOM_GLOW = (180, 220, 230, 50)
+STENCIL_TEXT_COLOR = (255, 255, 255, 60)
+TRUCK_CAB_WHITE = (245, 245, 250)
+TRUCK_CHASSIS = (50, 50, 55)
+WINDSHIELD = (40, 44, 50)
+TIRE_COLOR = (20, 20, 20)
+BOX_COLOR_1 = (205, 133, 63)
+BOX_COLOR_2 = (222, 184, 135)
+BOX_TAPE    = (190, 120, 50)
+CRATE_WIDTH = 45
+CRATE_HEIGHT = 90
+PARKING_GAP = 10
+LERP_FACTOR = 0.12
+MIN_SPEED = 1.5
+SPAWN_X = -100
+SPAWN_Y = SCREEN_HEIGHT - CRATE_HEIGHT - 40
+RECEIVING_BAY_X = 100
+RECEIVING_BAY_Y = SCREEN_HEIGHT - CRATE_HEIGHT - 40
+STACK_ZONE_X = 300
+STACK_ZONE_BASE_Y = SCREEN_HEIGHT - 60
+HOLDING_ZONE_X = 550
+HOLDING_ZONE_Y = SCREEN_HEIGHT - 60
+SHIPPING_BAY_X = -150
+SHIPPING_BAY_Y = SCREEN_HEIGHT - CRATE_HEIGHT - 250
+WAREHOUSE_PILLAR = (110, 120, 125)
+SHELF_COLOR = (180, 140, 100)
+CEILING_TRUSS = (70, 75, 80)
+FLUORESCENT_LIGHT = (220, 230, 240)
+HOPPER_METAL = (140, 145, 150)
+HOPPER_SHADOW = (100, 105, 110)
+CONCRETE_NOISE_1 = (110, 113, 117)
+CONCRETE_NOISE_2 = (120, 123, 127)
+WALL_BASE_COLOR = (130, 135, 140)
+WALL_LINE_COLOR = (120, 125, 130)
+LIGHT_RAY_COLOR = (255, 255, 220, 20)
+STATIC_SHADOW_COLOR = (0, 0, 0, 40)
+</file>
+
+<file path="Full_Stack_Sim/simulation/__init__.py/__init__.py">
+
+</file>
+
+<file path="Full_Stack_Sim/simulation/site_conveyor_list.py/site_conveyor_list.py">
+import pygame
+import random
+from settings import *
+from core.sprites import CrateSprite
+from core.ui import HandheldChassis, LCDDisplay, RoundButton
+BOX_SIZES = { 'small': (40, 40), 'medium': (60, 50), 'large': (80, 60) }
+class BoxSprite(CrateSprite):
+    def __init__(self, x, y, data_label, size_type='medium'):
+        self.size_type = size_type; self.width, self.height = BOX_SIZES[self.size_type]
+        super().__init__(x, y, data_label)
+        self.plate = str(data_label); self.is_dropping = False; self.is_bouncing = False
+        self.drop_speed = 0; self.gravity = 0.4; self.bounce_speed = -5; self.target_y_for_drop = 0
+        self.drop_callback = None; self.original_image = self.generate_box_surface()
+        self.image = self.original_image.copy(); self.rect = self.image.get_rect(center=(x, y))
+    def generate_box_surface(self):
+        surf = pygame.Surface((self.width + 6, self.height + 6), pygame.SRCALPHA)
+        pygame.draw.rect(surf, (0, 0, 0, 60), (5, 5, self.width, self.height), border_radius=4)
+        box_rect = pygame.Rect(2, 2, self.width, self.height)
+        pygame.draw.rect(surf, BOX_COLOR_1, box_rect, border_radius=4)
+        pygame.draw.rect(surf, (0,0,0, 40), box_rect, 2)
+        pygame.draw.line(surf, BOX_TAPE, (box_rect.centerx, box_rect.top), (box_rect.centerx, box_rect.bottom), 15)
+        label_w, label_h = self.label_surf.get_size()
+        label_x = (surf.get_width() - label_w) / 2; label_y = (surf.get_height() - label_h) / 2
+        surf.blit(self.label_surf, (label_x, label_y)); return surf
+    def drop_to(self, target_y, callback):
+        self.is_dropping = True; self.target_y_for_drop = target_y; self.drop_callback = callback
+    def update(self):
+        if self.is_dropping:
+            self.drop_speed += self.gravity; self.pos_y += self.drop_speed
+            if self.pos_y >= self.target_y_for_drop: self.pos_y = self.target_y_for_drop; self.is_dropping = False; self.is_bouncing = True
+            self.rect.centery = int(self.pos_y)
+        elif self.is_bouncing:
+            self.pos_y += self.bounce_speed; self.bounce_speed += self.gravity
+            if self.pos_y >= self.target_y_for_drop:
+                self.pos_y = self.target_y_for_drop; self.is_bouncing = False
+                if self.drop_callback: cb = self.drop_callback; self.drop_callback = None; cb()
+            self.rect.centery = int(self.pos_y)
+        elif self.is_moving:
+            dx = self.target_x - self.pos_x; dy = self.target_y - self.pos_y
+            if (dx**2 + dy**2)**0.5 < MIN_SPEED:
+                self.pos_x, self.pos_y = self.target_x, self.target_y; self.is_moving = False
+                if self.on_finish_callback: cb = self.on_finish_callback; self.on_finish_callback = None; cb()
+            else: self.pos_x += dx * LERP_FACTOR; self.pos_y += dy * LERP_FACTOR
+            self.rect.center = (int(self.pos_x), int(self.pos_y))
+        self.image = self.original_image
+class Node:
+    def __init__(self, label): self.label = label; self.next = None
+class LinkedListManager:
+    def __init__(self, capacity=10): self.head = None; self.size = 0; self.capacity = capacity
+    def is_full(self): return self.size >= self.capacity
+    def insert_at(self, index, label):
+        if self.is_full(): return {"type": "ERROR", "message": "CONVEYOR FULL"}
+        if index < 0 or index > self.size: return {"type": "ERROR", "message": "INVALID INDEX"}
+        new_node = Node(label)
+        if index == 0: new_node.next = self.head; self.head = new_node
+        else:
+            current = self.head
+            for _ in range(index - 1): current = current.next
+            new_node.next = current.next; current.next = new_node
+        self.size += 1; return {"type": "INSERT", "label": label, "index": index}
+    def remove_box(self, label):
+        if not self.head: return [{"type": "ERROR", "message": "CONVEYOR EMPTY"}]
+        if self.head.label == label:
+            self.head = self.head.next; self.size -= 1
+            return [{"type": "REMOVE", "label": label, "index": 0}]
+        current = self.head; index = 0
+        while current.next and current.next.label != label: current = current.next; index += 1
+        if current.next:
+            removed_node = current.next; current.next = removed_node.next; self.size -= 1
+            return [{"type": "REMOVE", "label": removed_node.label, "index": index + 1}]
+        return [{"type": "ERROR", "message": "NOT FOUND"}]
+    def find_box(self, label):
+        current = self.head
+        while current:
+            if current.label == label: return True
+            current = current.next
+        return False
+class ConveyorSimulation:
+    def __init__(self, screen):
+        self.screen = screen; self.logic = LinkedListManager(capacity=10)
+        self.all_sprites = pygame.sprite.Group(); self.crates_group = pygame.sprite.Group()
+        self.placement_mode = False; self.label_to_place = ""; self.placement_markers = []
+        self.ui_x = 750; self.ui_w = 250
+        self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
+        self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
+        self.lcd.update_status("CONVEYOR OPS")
+        btn_cx = self.ui_x + self.ui_w // 2
+        self.btn_append = RoundButton(btn_cx, 260, 40, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "APPEND", self.action_append)
+        self.btn_insert = RoundButton(btn_cx, 350, 40, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "INSERT AT", self.action_insert_at)
+        self.btn_remove = RoundButton(btn_cx, 440, 40, BTN_RED_BASE, BTN_RED_LIGHT, "REMOVE", self.action_remove)
+        self.visual_list = []; self.is_animating = False; self.animation_lock_count = 0
+        self.BELT_Y = SCREEN_HEIGHT - 100; self.SIMULATION_WIDTH = 750
+        self.HOPPER_X = self.SIMULATION_WIDTH / 2; self.HOPPER_Y = -100
+        self.DESPAWN_POINT = (-100, self.BELT_Y); self.belt_pattern_offset = 0
+        self.background = self._generate_static_background()
+    def _draw_shelf_unit(self, surf, x, y, w, h, rows):
+        shadow_offset = 8
+        pygame.draw.rect(surf, STATIC_SHADOW_COLOR, (x + shadow_offset, y + shadow_offset, w, h))
+        for r in range(rows + 1):
+            ry = y + (r * (h / rows))
+            pygame.draw.line(surf, (80,80,85), (x, ry), (x + w, ry), 2)
+            pygame.draw.line(surf, (120,120,125), (x, ry-1), (x + w, ry-1), 1)
+        pygame.draw.line(surf, (80,80,85), (x, y), (x, y + h), 2)
+        pygame.draw.line(surf, (80,80,85), (x+w, y), (x+w, y + h), 2)
+        for _ in range(rows * 3):
+            bx = x + random.randint(5, w - 25)
+            by = y + (random.randrange(rows) * (h/rows)) + 5
+            bw = random.randint(10, 20); bh = random.randint(5, 10)
+            pygame.draw.rect(surf, BOX_COLOR_2, (bx, by, bw, bh))
+    def _generate_static_background(self):
+        bg = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        bg.fill(FLOOR_COLOR)
+        for _ in range(15000):
+            color = random.choice([CONCRETE_NOISE_1, CONCRETE_NOISE_2])
+            bg.set_at((random.randint(0, SCREEN_WIDTH-1), random.randint(100, SCREEN_HEIGHT-1)), color)
+        for _ in range(20):
+            points = []
+            px, py = random.randint(0, self.SIMULATION_WIDTH-1), random.randint(200, SCREEN_HEIGHT-1)
+            for _ in range(random.randint(3, 6)):
+                points.append((px, py))
+                px += random.randint(-20, 20); py += random.randint(-20, 20)
+            if len(points) > 1: pygame.draw.lines(bg, (100,103,107), False, points, 1)
+        wall_rect = pygame.Rect(0, 0, SCREEN_WIDTH, self.BELT_Y - 80)
+        bg.fill(WALL_BASE_COLOR, wall_rect)
+        for y in range(0, wall_rect.height, 15):
+            pygame.draw.line(bg, WALL_LINE_COLOR, (0, y), (SCREEN_WIDTH, y), 1)
+        pygame.draw.line(bg, (0,0,0, 100), (0, wall_rect.bottom), (SCREEN_WIDTH, wall_rect.bottom), 2)
+        self._draw_shelf_unit(bg, 50, 250, 200, 250, 5)
+        self._draw_shelf_unit(bg, 500, 250, 200, 250, 5)
+        pygame.draw.rect(bg, (40, 45, 50), (0, 0, SCREEN_WIDTH, 80))
+        light_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        light_positions = []
+        for i in range(0, SCREEN_WIDTH, 100):
+            light_positions.append((i + 40, 38))
+            pygame.draw.rect(bg, (30,35,40), (i, 30, 80, 15))
+            pygame.draw.rect(bg, (220,220,200), (i+5, 32, 70, 11))
+        for lx, ly in light_positions:
+            points = [(lx - 20, ly), (lx + 20, ly), (lx + 80, SCREEN_HEIGHT), (lx - 80, SCREEN_HEIGHT)]
+            pygame.draw.polygon(light_layer, LIGHT_RAY_COLOR, points)
+        bg.blit(light_layer, (0, 0))
+        return bg
+    def _calculate_layout_parameters(self):
+        if not self.visual_list: return {'start_x': self.SIMULATION_WIDTH / 2, 'gap': 0}
+        total_box_width = sum(sprite.width for sprite in self.visual_list)
+        total_gap_space = self.SIMULATION_WIDTH - total_box_width
+        gap_size = total_gap_space / (len(self.visual_list) + 1)
+        start_x = gap_size
+        return {'start_x': start_x, 'gap': gap_size}
+    def _calculate_target_positions(self):
+        layout = self._calculate_layout_parameters()
+        positions = []; current_x = layout['start_x']
+        for sprite in self.visual_list:
+            target_x = current_x + sprite.width / 2
+            positions.append(target_x)
+            current_x += sprite.width + layout['gap']
+        return positions
+    def draw_environment(self):
+        self.screen.blit(self.background, (0, 0))
+        belt_height = 40; belt_rect = pygame.Rect(0, self.BELT_Y - belt_height//2, self.SIMULATION_WIDTH, belt_height)
+        pygame.draw.rect(self.screen, (20,20,20), belt_rect)
+        self.belt_pattern_offset = (self.belt_pattern_offset + 3) % 20
+        for x in range(self.belt_pattern_offset, self.SIMULATION_WIDTH, 20):
+            pygame.draw.circle(self.screen, (30,30,35), (x, self.BELT_Y), 15)
+            pygame.draw.circle(self.screen, (60,60,65), (x, self.BELT_Y), 12)
+        hopper_shadow_poly = [(self.HOPPER_X - 80, self.BELT_Y - 120), (self.HOPPER_X + 80, self.BELT_Y - 120), (self.HOPPER_X, self.BELT_Y - 60)]
+        pygame.draw.polygon(self.screen, STATIC_SHADOW_COLOR, [(p[0]+8, p[1]+8) for p in hopper_shadow_poly])
+        pygame.draw.polygon(self.screen, (120,125,130), [(self.HOPPER_X - 40, 0), (self.HOPPER_X + 40, 0), (self.HOPPER_X + 80, self.BELT_Y - 120), (self.HOPPER_X - 80, self.BELT_Y - 120)])
+        pygame.draw.polygon(self.screen, (100,105,110), hopper_shadow_poly)
+    def draw_placement_markers(self):
+        if not self.placement_mode: return
+        self.placement_markers.clear(); mouse_pos = pygame.mouse.get_pos()
+        layout = self._calculate_layout_parameters()
+        x_coords = [layout['start_x'] / 2]
+        current_x = layout['start_x']
+        for sprite in self.visual_list:
+            current_x += sprite.width; x_coords.append(current_x + layout['gap'] / 2); current_x += layout['gap']
+        for i, pos_x in enumerate(x_coords):
+            marker_rect = pygame.Rect(pos_x - 20, self.BELT_Y - 35, 40, 70)
+            self.placement_markers.append((marker_rect, i))
+            color = STRIPE_YELLOW
+            if marker_rect.collidepoint(mouse_pos): color = BTN_GREEN_LIGHT
+            pygame.draw.rect(self.screen, color, marker_rect, 3, border_radius=6)
+    def on_animation_complete(self):
+        self.animation_lock_count -= 1
+        if self.animation_lock_count <= 0: self.is_animating = False; self.lcd.update_status("READY")
+    def animate_to_positions(self):
+        self.is_animating = True
+        target_positions = self._calculate_target_positions()
+        if not self.visual_list: self.is_animating = False; self.lcd.update_status("READY"); return
+        self.animation_lock_count = len(self.visual_list)
+        for i, sprite in enumerate(self.visual_list): sprite.move_to((target_positions[i], self.BELT_Y), self.on_animation_complete)
+    def execute_insertion(self, label, index):
+        receipt = self.logic.insert_at(index, label)
+        if receipt['type'] == 'ERROR': self.lcd.update_status(f"ERR: {receipt['message']}"); return
+        self.lcd.update_status(f"INSERT {label}@{index}"); self.lcd.text = ""
+        self.is_animating = True
+        size_type = random.choice(list(BOX_SIZES.keys()))
+        new_box = BoxSprite(self.HOPPER_X, self.HOPPER_Y, label, size_type)
+        self.all_sprites.add(new_box); self.crates_group.add(new_box)
+        self.visual_list.insert(index, new_box)
+        def stage2_slide_into_place(): self.animate_to_positions()
+        new_box.drop_to(self.BELT_Y, callback=stage2_slide_into_place)
+    def action_append(self):
+        if self.is_animating or self.placement_mode: return
+        label = self.lcd.text.upper()
+        if not label: self.lcd.update_status("ERR: NO INPUT"); return
+        if self.logic.find_box(label): self.lcd.update_status("ERR: DUPLICATE"); return
+        self.execute_insertion(label, len(self.visual_list))
+    def action_insert_at(self):
+        if self.is_animating: return
+        if self.placement_mode: self.placement_mode = False; self.lcd.update_status("CANCELED"); return
+        label = self.lcd.text.upper()
+        if not label: self.lcd.update_status("ERR: NO LABEL"); return
+        if self.logic.find_box(label): self.lcd.update_status("ERR: DUPLICATE"); return
+        if self.logic.is_full(): self.lcd.update_status("ERR: CONVEYOR FULL"); return
+        self.placement_mode = True; self.label_to_place = label; self.lcd.update_status("CLICK A SLOT...")
+    def action_remove(self):
+        if self.is_animating or self.placement_mode: return
+        label = self.lcd.text.upper()
+        if not label: self.lcd.update_status("ERR: NO INPUT"); return
+        receipt = self.logic.remove_box(label)[0]
+        if receipt['type'] == 'ERROR': self.lcd.update_status(f"ERR: {receipt['message']}"); return
+        self.lcd.update_status(f"OUT: {label}"); self.lcd.text = ""
+        sprite_to_remove = next((s for s in self.visual_list if s.plate == label), None)
+        if sprite_to_remove:
+            self.is_animating = True; self.visual_list.remove(sprite_to_remove)
+            self.animation_lock_count = 1
+            sprite_to_remove.move_to(self.DESPAWN_POINT, callback=lambda: [sprite_to_remove.kill(), self.on_animation_complete()])
+            self.animate_to_positions()
+    def handle_mouse_click_for_insertion(self, event):
+        if self.placement_mode and event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            for marker_rect, index in self.placement_markers:
+                if marker_rect.collidepoint(event.pos):
+                    self.placement_mode = False; self.execute_insertion(self.label_to_place, index); return True
+            self.placement_mode = False; self.lcd.update_status("CANCELED"); return True
+        return False
+    def handle_events(self, event):
+        if self.handle_mouse_click_for_insertion(event): return
+        if self.placement_mode: return
+        self.lcd.handle_event(event); self.btn_append.handle_event(event)
+        self.btn_insert.handle_event(event); self.btn_remove.handle_event(event)
+    def update(self):
+        self.all_sprites.update(); self.lcd.update()
+    def draw(self):
+        self.draw_environment(); self.all_sprites.draw(self.screen)
+        self.draw_placement_markers(); self.chassis.draw(self.screen)
+        self.lcd.draw(self.screen); self.btn_append.draw(self.screen)
+        self.btn_insert.draw(self.screen); self.btn_remove.draw(self.screen)
+</file>
+
+<file path="Full_Stack_Sim/simulation/site_parking_queue.py/site_parking_queue.py">
+import pygame
+import random
+import math
+from settings import *
+from core.sprites import CrateSprite
+from core.ui import HandheldChassis, LCDDisplay, RoundButton
+class Vehicle:
+    def __init__(self, plate, arrival_count, departure_count):
+        self.plate = plate
+        self.arrival_count = arrival_count
+        self.departure_count = departure_count
+class QueueManager:
+    def __init__(self, capacity=10):
+        self.items = []
+        self.capacity = capacity
+        self.history = {}
+    def _get_stats(self, plate):
+        if plate not in self.history:
+            self.history[plate] = {'arrivals': 0, 'departures': 0}
+        return self.history[plate]
+    def enqueue(self, plate):
+        if len(self.items) >= self.capacity:
+            return {"type": "OVERFLOW", "message": "LANE FULL"}
+        for v in self.items:
+            if v.plate == plate:
+                return {"type": "DUPLICATE", "message": "ALREADY HERE"}
+        stats = self._get_stats(plate)
+        stats['arrivals'] += 1
+        new_vehicle = Vehicle(plate, stats['arrivals'], stats['departures'])
+        self.items.append(new_vehicle)
+        return {
+            "type": "ENQUEUE",
+            "index": len(self.items) - 1,
+            "data": new_vehicle
+        }
+    def remove_vehicle(self, plate):
+        target_index = -1
+        for i, v in enumerate(self.items):
+            if v.plate == plate:
+                target_index = i
+                break
+        if target_index == -1:
+            return [{"type": "ERROR", "message": "NOT FOUND"}]
+        events = []
+        for _ in range(target_index):
+            cycling_vehicle = self.items.pop(0)
+            stats = self._get_stats(cycling_vehicle.plate)
+            stats['departures'] += 1
+            stats['arrivals'] += 1
+            cycling_vehicle.arrival_count = stats['arrivals']
+            cycling_vehicle.departure_count = stats['departures']
+            self.items.append(cycling_vehicle)
+            events.append({
+                "type": "CYCLE",
+                "data": cycling_vehicle,
+                "new_index": len(self.items) - 1
+            })
+        target_vehicle = self.items.pop(0)
+        stats = self._get_stats(target_vehicle.plate)
+        stats['departures'] += 1
+        events.append({
+            "type": "DEPART",
+            "data": target_vehicle,
+            "stats": stats
+        })
+        return events
+    def get_inventory_report(self):
+        report = []
+        for v in self.items:
+            stats = self.history[v.plate]
+            report.append({
+                "plate": v.plate,
+                "arrivals": stats['arrivals'],
+                "departures": stats['departures']
+            })
+        return report
+class ParkingQueueSimulation:
+    def __init__(self, screen):
+        self.screen = screen
+        self.logic = QueueManager(capacity=10)
+        self.all_sprites = pygame.sprite.Group()
+        self.crates_group = pygame.sprite.Group()
+        self.ui_x = 750
+        self.ui_y = 0
+        self.ui_w = 250
+        self.ui_h = SCREEN_HEIGHT
+        self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
+        self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
+        self.lcd.update_status("WEIGH STATION")
+        btn_cx = self.ui_x + self.ui_w // 2
+        self.btn_arrive = RoundButton(btn_cx, 280, 45, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "ENQUEUE", self.action_arrive)
+        self.btn_depart = RoundButton(btn_cx, 390, 45, BTN_RED_BASE, BTN_RED_LIGHT, "DEQUEUE", self.action_depart)
+        self.btn_summary = RoundButton(btn_cx, 500, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "MANIFEST", self.action_summary)
+        self.btn_skip = RoundButton(btn_cx, 590, 30, (100, 100, 100), (150, 150, 150), "SKIP", self.action_skip)
+        self.visual_queue = []
+        self.is_animating = False
+        self.show_summary = False
+        self.event_queue = []
+        self.LANE_Y = 320
+        self.SCALE_FACTOR = 0.7
+        self.SLOT_GAP = 72
+        self.GATE_X = 700
+        self.ENTRY_SPAWN = (-100, self.LANE_Y)
+        self.EXIT_POINT = (SCREEN_WIDTH + 100, self.LANE_Y)
+        self.LOOP_EXIT_X = self.GATE_X + 40
+        self.LOOP_DOWN_Y = 580
+        self.LOOP_BACK_X = 20
+        self.bg_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self._generate_static_environment()
+    def draw_container(self, surf, x, y, color, angle=0):
+        w, h = 120, 50
+        c_surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        pygame.draw.rect(surf, SHADOW_COLOR, (x+5, y+5, w, h))
+        pygame.draw.rect(c_surf, color, (0, 0, w, h))
+        pygame.draw.rect(c_surf, (30, 30, 30), (0, 0, w, h), 1)
+        for i in range(0, w, 10):
+            pygame.draw.line(c_surf, CONTAINER_RIB, (i, 0), (i, h), 2)
+        pygame.draw.rect(c_surf, (200, 200, 200), (5, 5, 30, 10))
+        if angle != 0:
+            c_surf = pygame.transform.rotate(c_surf, angle)
+        surf.blit(c_surf, (x, y))
+    def draw_barrel_group(self, surf, x, y):
+        positions = [(0,0), (15,5), (5, 15)]
+        for dx, dy in positions:
+            bx, by = x + dx, y + dy
+            pygame.draw.circle(surf, SHADOW_COLOR, (bx+2, by+2), 7)
+            pygame.draw.circle(surf, BARREL_BLUE, (bx, by), 7)
+            pygame.draw.circle(surf, BARREL_RIM, (bx, by), 7, 1)
+            pygame.draw.circle(surf, (20, 20, 30), (bx+2, by+2), 2)
+    def draw_fence(self, surf, start, end):
+        pygame.draw.line(surf, FENCE_SHADOW, (start[0]+2, start[1]+2), (end[0]+2, end[1]+2), 2)
+        pygame.draw.line(surf, FENCE_COLOR, start, end, 2)
+        dist = math.hypot(end[0]-start[0], end[1]-start[1])
+        count = int(dist // 30)
+        for i in range(count + 1):
+            t = i / count if count > 0 else 0
+            px = start[0] + (end[0] - start[0]) * t
+            py = start[1] + (end[1] - start[1]) * t
+            pygame.draw.circle(surf, (100, 100, 100), (int(px), int(py)), 3)
+    def draw_drain(self, surf, x, y):
+        pygame.draw.rect(surf, DRAIN_METAL, (x, y, 30, 30))
+        pygame.draw.rect(surf, (30, 30, 30), (x, y, 30, 30), 2)
+        for i in range(x+5, x+30, 5):
+            pygame.draw.line(surf, (30, 30, 30), (i, y), (i, y+30), 2)
+    def draw_crack(self, surf, x, y):
+        points = [(x, y)]
+        curr_x, curr_y = x, y
+        for _ in range(4):
+            curr_x += random.randint(-10, 10)
+            curr_y += random.randint(-10, 10)
+            points.append((curr_x, curr_y))
+        pygame.draw.lines(surf, CRACK_COLOR, False, points, 1)
+    def _generate_static_environment(self):
+        surf = self.bg_surface
+        surf.fill(YARD_CONCRETE)
+        for _ in range(8000):
+            x = random.randint(0, 750)
+            y = random.randint(0, SCREEN_HEIGHT)
+            color = random.choice([YARD_NOISE_1, YARD_NOISE_2])
+            surf.set_at((x, y), color)
+        for _ in range(20):
+            self.draw_crack(surf, random.randint(0, 750), random.randint(0, 700))
+        rw = 80
+        def draw_road_rect(rect):
+            pygame.draw.rect(surf, ASPHALT_BASE, rect)
+            for _ in range(int(rect.width * rect.height * 0.005)):
+                rx = random.randint(rect.left, rect.right-1)
+                ry = random.randint(rect.top, rect.bottom-1)
+                surf.set_at((rx, ry), ASPHALT_DARK)
+        draw_road_rect(pygame.Rect(-100, self.LANE_Y - rw//2, 900, rw))
+        draw_road_rect(pygame.Rect(self.LOOP_EXIT_X - rw//2, self.LANE_Y, rw, self.LOOP_DOWN_Y - self.LANE_Y))
+        draw_road_rect(pygame.Rect(self.LOOP_BACK_X, self.LOOP_DOWN_Y - rw//2, self.LOOP_EXIT_X - self.LOOP_BACK_X, rw))
+        draw_road_rect(pygame.Rect(self.LOOP_BACK_X - rw//2, self.LANE_Y, rw, self.LOOP_DOWN_Y - self.LANE_Y))
+        for x in range(-100, 800, 60):
+            pygame.draw.line(surf, ROAD_STRIPE, (x, self.LANE_Y), (x+30, self.LANE_Y), 2)
+        pygame.draw.line(surf, (255, 255, 255), (self.GATE_X, self.LANE_Y - 35), (self.GATE_X, self.LANE_Y + 35), 6)
+        self.draw_drain(surf, 200, 500)
+        self.draw_drain(surf, 600, 500)
+        oil_surf = pygame.Surface((60, 40), pygame.SRCALPHA)
+        pygame.draw.ellipse(oil_surf, OIL_STAIN, (0,0,60,40))
+        surf.blit(oil_surf, (self.GATE_X - 20, self.LANE_Y + 10))
+        island_rect = pygame.Rect(self.LOOP_BACK_X + 40 + 10, self.LANE_Y + 40 + 10,
+                                  (self.LOOP_EXIT_X - self.LOOP_BACK_X) - 80 - 20,
+                                  (self.LOOP_DOWN_Y - self.LANE_Y) - 80 - 20)
+        pygame.draw.rect(surf, (125, 125, 130), island_rect)
+        for i in range(island_rect.left, island_rect.right, 20):
+            p1 = (i, island_rect.bottom)
+            p2 = (i + 20, island_rect.top)
+            if p2[0] < island_rect.right:
+                pygame.draw.line(surf, (115, 115, 120), p1, p2, 2)
+        self.draw_container(surf, island_rect.left + 20, island_rect.top + 20, CONTAINER_RED)
+        self.draw_container(surf, island_rect.left + 40, island_rect.top + 10, CONTAINER_BLUE)
+        self.draw_container(surf, island_rect.left + 160, island_rect.top + 30, CONTAINER_GREEN, angle=10)
+        self.draw_barrel_group(surf, island_rect.right - 60, island_rect.bottom - 60)
+        self.draw_barrel_group(surf, island_rect.right - 80, island_rect.bottom - 40)
+        self._draw_static_pallet(surf, island_rect.right - 120, island_rect.bottom - 50)
+        self._draw_static_pallet(surf, island_rect.right - 120, island_rect.bottom - 80)
+        self.draw_fence(surf, (0, 180), (400, 180))
+        self.draw_fence(surf, (400, 180), (400, 0))
+        for i in range(3):
+            for j in range(2):
+                self._draw_static_pallet(surf, 50 + i*40, 100 + j*40)
+        self.draw_container(surf, 100, 620, CONTAINER_BLUE)
+        self.draw_container(surf, 230, 630, CONTAINER_RED, angle=-5)
+    def _draw_static_pallet(self, surf, x, y):
+        pygame.draw.rect(surf, SHADOW_COLOR, (x+5, y+5, 30, 30))
+        pygame.draw.rect(surf, BOX_COLOR_2, (x, y, 30, 30))
+        pygame.draw.line(surf, BOX_TAPE, (x, y+5), (x+30, y+5), 2)
+        pygame.draw.line(surf, BOX_TAPE, (x, y+15), (x+30, y+15), 2)
+        pygame.draw.line(surf, BOX_TAPE, (x, y+25), (x+30, y+25), 2)
+    def draw_brick_building(self, x, y, w, h, label):
+        pygame.draw.rect(self.screen, SHADOW_COLOR, (x+10, y+10, w, h))
+        rect = pygame.Rect(x, y, w, h)
+        pygame.draw.rect(self.screen, BRICK_RED, rect)
+        for by in range(y, y+h, 10):
+            pygame.draw.line(self.screen, BRICK_DETAIL, (x, by), (x+w, by), 1)
+            offset = 0 if (by//10)%2==0 else 10
+            for bx in range(x + offset, x+w, 20):
+                pygame.draw.line(self.screen, BRICK_DETAIL, (bx, by), (bx, by+10), 1)
+        pygame.draw.rect(self.screen, (50, 30, 30), rect, 2)
+        roof_h = h - 15
+        roof_rect = pygame.Rect(x-4, y-4, w+8, roof_h)
+        pygame.draw.rect(self.screen, ROOF_TAR, roof_rect)
+        pygame.draw.rect(self.screen, (30, 30, 30), roof_rect, 2)
+        font = pygame.font.SysFont("Arial", 10, bold=True)
+        txt = font.render(label, True, (200, 200, 200))
+        self.screen.blit(txt, (x + w//2 - txt.get_width()//2, y + roof_h//2))
+    def draw_bollard(self, x, y):
+        pygame.draw.circle(self.screen, SHADOW_COLOR, (x+3, y+3), 6)
+        pygame.draw.circle(self.screen, (50, 50, 50), (x, y), 6)
+        pygame.draw.circle(self.screen, BOLLARD_YELLOW, (x, y), 4)
+    def draw_dynamic_environment(self):
+        self.screen.blit(self.bg_surface, (0, 0))
+        self.draw_brick_building(self.GATE_X + 20, self.LANE_Y - 130, 80, 60, "GUARD")
+        wh_rect = pygame.Rect(450, 30, 250, 120)
+        pygame.draw.rect(self.screen, SHADOW_COLOR, wh_rect.move(10, 10))
+        pygame.draw.rect(self.screen, WAREHOUSE_WALL, wh_rect)
+        for i in range(wh_rect.left, wh_rect.right, 10):
+            pygame.draw.line(self.screen, (150, 155, 160), (i, wh_rect.top), (i, wh_rect.bottom), 1)
+        pygame.draw.rect(self.screen, (100, 100, 100), wh_rect, 2)
+        pygame.draw.rect(self.screen, WAREHOUSE_ROOF, (440, 20, 270, 100))
+        pygame.draw.rect(self.screen, (80, 80, 80), (440, 20, 270, 100), 2)
+        font = pygame.font.SysFont("Impact", 20)
+        lbl = font.render("LOGISTICS HUB", True, (180, 180, 180))
+        self.screen.blit(lbl, (575 - lbl.get_width()//2, 60))
+        scale_rect = pygame.Rect(self.GATE_X - 80, self.LANE_Y - 35, 100, 70)
+        pygame.draw.rect(self.screen, (50, 50, 50), scale_rect)
+        pygame.draw.rect(self.screen, (180, 180, 180), scale_rect.inflate(-4, -4))
+        pygame.draw.rect(self.screen, (100, 100, 100), scale_rect.inflate(-4, -4), 1)
+        gate_pivot = (self.GATE_X + 25, self.LANE_Y - 40)
+        pygame.draw.circle(self.screen, (200, 50, 50), gate_pivot, 6)
+        pygame.draw.line(self.screen, (255, 255, 255), gate_pivot, (self.GATE_X + 25, self.LANE_Y + 40), 4)
+        pygame.draw.line(self.screen, (200, 0, 0), gate_pivot, (self.GATE_X + 25, self.LANE_Y + 40), 4)
+        island_rect = pygame.Rect(self.LOOP_BACK_X + 40 + 10, self.LANE_Y + 40 + 10,
+                                  (self.LOOP_EXIT_X - self.LOOP_BACK_X) - 80 - 20,
+                                  (self.LOOP_DOWN_Y - self.LANE_Y) - 80 - 20)
+        self.draw_bollard(island_rect.left, island_rect.top)
+        self.draw_bollard(island_rect.right, island_rect.top)
+        self.draw_bollard(island_rect.left, island_rect.bottom)
+        self.draw_bollard(island_rect.right, island_rect.bottom)
+    def _scale_sprite(self, sprite):
+        w = int(sprite.original_image.get_width() * self.SCALE_FACTOR)
+        h = int(sprite.original_image.get_height() * self.SCALE_FACTOR)
+        sprite.original_image = pygame.transform.smoothscale(sprite.original_image, (w, h))
+        sprite.image = sprite.original_image.copy()
+        sprite.rect = sprite.image.get_rect(center=sprite.rect.center)
+    def _force_orientation(self, sprite, angle):
+        sprite.angle = angle
+        sprite.image = pygame.transform.rotate(sprite.original_image, angle)
+        sprite.rect = sprite.image.get_rect(center=(sprite.pos_x, sprite.pos_y))
+    def _realign_queue(self, exclude_sprites=None):
+        if exclude_sprites is None:
+            exclude_sprites = []
+        for i, sprite in enumerate(self.visual_queue):
+            if sprite in exclude_sprites:
+                continue
+            target_x = self.GATE_X - (i * self.SLOT_GAP)
+            if abs(sprite.pos_x - target_x) > 5:
+                sprite.move_to((target_x, self.LANE_Y), callback=lambda s=sprite: self._force_orientation(s, 0))
+    def action_arrive(self):
+        if self.is_animating or self.show_summary: return
+        plate = self.lcd.text.upper()
+        if not plate:
+            self.lcd.update_status("ERR: NO INPUT")
+            return
+        receipt = self.logic.enqueue(plate)
+        if receipt['type'] in ['OVERFLOW', 'DUPLICATE']:
+            self.lcd.update_status(f"ERR: {receipt['message']}")
+            return
+        self.lcd.update_status(f"IN: {plate}")
+        self.lcd.text = ""
+        new_crate = CrateSprite(self.ENTRY_SPAWN[0], self.ENTRY_SPAWN[1], receipt['data'].plate)
+        self._scale_sprite(new_crate)
+        self.all_sprites.add(new_crate)
+        self.crates_group.add(new_crate)
+        self.visual_queue.append(new_crate)
+        target_x = self.GATE_X - (receipt['index'] * self.SLOT_GAP)
+        self.is_animating = True
+        new_crate.move_to((target_x, self.LANE_Y), callback=self.on_animation_complete)
+    def action_depart(self):
+        if self.is_animating or self.show_summary: return
+        plate = self.lcd.text.upper()
+        if not plate: return
+        events = self.logic.remove_vehicle(plate)
+        if events[0]['type'] == 'ERROR':
+            self.lcd.update_status(f"ERR: {events[0]['message']}")
+            return
+        self.lcd.update_status(f"OUT: {plate}")
+        self.lcd.text = ""
+        self.is_animating = True
+        self.event_queue = events
+        self.process_next_event()
+    def action_skip(self):
+        if not self.is_animating: return
+        # 1. Stop all movement
+        for s in self.all_sprites:
+            s.is_moving = False
+            s.on_finish_callback = None
+        # 2. Clear pending events
+        self.event_queue = []
+        # 3. Sync Visuals to Logic
+        valid_plates = [v.plate for v in self.logic.items]
+        # Kill sprites that shouldn't exist
+        for sprite in self.crates_group:
+            if sprite.plate not in valid_plates:
+                sprite.kill()
+        # Rebuild visual_queue to match logic order
+        self.visual_queue = []
+        for vehicle in self.logic.items:
+            found_sprite = next((s for s in self.crates_group if s.plate == vehicle.plate), None)
+            if found_sprite:
+                self.visual_queue.append(found_sprite)
+        # 4. Snap sprites to correct positions
+        for i, sprite in enumerate(self.visual_queue):
+            target_x = self.GATE_X - (i * self.SLOT_GAP)
+            sprite.pos_x = target_x
+            sprite.pos_y = self.LANE_Y
+            sprite.rect.center = (int(sprite.pos_x), int(sprite.pos_y))
+            self._force_orientation(sprite, 0)
+        # 5. Reset State
+        self.is_animating = False
+        self.lcd.update_status("READY")
+    def process_next_event(self):
+        if not self.event_queue:
+            self._realign_queue()
+            self.on_animation_complete()
+            return
+        event = self.event_queue.pop(0)
+        if event['type'] == 'CYCLE':
+            sprite = self.visual_queue.pop(0)
+            self.visual_queue.append(sprite)
+            self._realign_queue(exclude_sprites=[sprite])
+            final_slot_x = self.GATE_X - (event['new_index'] * self.SLOT_GAP)
+            def step4_to_slot():
+                sprite.move_to((final_slot_x, self.LANE_Y), callback=lambda: [self._force_orientation(sprite, 0), self.process_next_event()])
+            def step3_up():
+                self._force_orientation(sprite, 90)
+                sprite.move_to((self.LOOP_BACK_X + 30, self.LANE_Y), callback=step4_to_slot)
+            def step2_left():
+                self._force_orientation(sprite, 180)
+                sprite.move_to((self.LOOP_BACK_X + 30, self.LOOP_DOWN_Y + 30), callback=step3_up)
+            def step1_down():
+                self._force_orientation(sprite, 270)
+                sprite.move_to((self.LOOP_EXIT_X, self.LOOP_DOWN_Y + 30), callback=step2_left)
+            sprite.move_to((self.LOOP_EXIT_X, self.LANE_Y), callback=step1_down)
+        elif event['type'] == 'DEPART':
+            sprite = self.visual_queue.pop(0)
+            def cleanup():
+                sprite.kill()
+                self._realign_queue()
+                self.process_next_event()
+            sprite.move_to(self.EXIT_POINT, callback=cleanup)
+    def action_summary(self):
+        self.show_summary = not self.show_summary
+    def on_animation_complete(self):
+        self.is_animating = False
+        self._force_orientation_all()
+        self.lcd.update_status("READY")
+    def _force_orientation_all(self):
+        for s in self.crates_group:
+            s.angle = 0
+            s.image = pygame.transform.rotate(s.original_image, 0)
+            s.rect = s.image.get_rect(center=(s.pos_x, s.pos_y))
+    def handle_events(self, event):
+        if self.show_summary:
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                self.show_summary = False
+            return
+        self.lcd.handle_event(event)
+        self.btn_arrive.handle_event(event)
+        self.btn_depart.handle_event(event)
+        self.btn_summary.handle_event(event)
+        self.btn_skip.handle_event(event)
+    def update(self):
+        if self.show_summary: return
+        self.all_sprites.update()
+        self.lcd.update()
+    def draw_summary_overlay(self):
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        overlay.set_alpha(230)
+        overlay.fill((20, 25, 30))
+        self.screen.blit(overlay, (0, 0))
+        font_title = pygame.font.SysFont("Arial", 24, bold=True)
+        font_mono = pygame.font.SysFont("Courier New", 14)
+        pygame.draw.rect(self.screen, (255, 200, 50), (0, 40, SCREEN_WIDTH, 50))
+        title = font_title.render("WEIGH STATION MANIFEST", True, (20, 20, 20))
+        self.screen.blit(title, (SCREEN_WIDTH//2 - title.get_width()//2, 55))
+        headers = f"{'PLATE ID':<15} {'ARRIVALS':<10} {'DEPARTURES':<10}"
+        self.screen.blit(font_mono.render(headers, True, (255, 200, 50)), (SCREEN_WIDTH//2 - 150, 120))
+        pygame.draw.line(self.screen, (255, 200, 50), (SCREEN_WIDTH//2 - 160, 135), (SCREEN_WIDTH//2 + 160, 135), 1)
+        report = self.logic.get_inventory_report()
+        start_y = 150
+        for i, item in enumerate(report):
+            txt = f"{item['plate']:<15} {item['arrivals']:<10} {item['departures']:<10}"
+            col = (255, 255, 255) if i % 2 == 0 else (200, 200, 210)
+            self.screen.blit(font_mono.render(txt, True, col), (SCREEN_WIDTH//2 - 150, start_y + i*20))
+    def draw(self):
+        self.draw_dynamic_environment()
+        self.all_sprites.draw(self.screen)
+        for sprite in self.crates_group:
+            label_x = sprite.rect.centerx - sprite.label_surf.get_width() // 2
+            label_y = sprite.rect.centery - 35
+            self.screen.blit(sprite.label_surf, (label_x, label_y))
+        self.chassis.draw(self.screen)
+        self.lcd.draw(self.screen)
+        self.btn_arrive.draw(self.screen)
+        self.btn_depart.draw(self.screen)
+        self.btn_summary.draw(self.screen)
+        self.btn_skip.draw(self.screen)
+        if self.show_summary:
+            self.draw_summary_overlay()
+</file>
+
+<file path="Full_Stack_Sim/simulation/site_parking_stack.py/site_parking_stack.py">
+import pygame
+import random
+from settings import *
+from core.sprites import CrateSprite
+from core.ui import HandheldChassis, LCDDisplay, RoundButton
+class Vehicle:
+    def __init__(self, plate, arrival_count, departure_count):
+        self.plate = plate; self.arrival_count = arrival_count; self.departure_count = departure_count
+class StackManager:
+    def __init__(self, capacity=10):
+        self.items = []; self.capacity = capacity; self.history = {}
+    def _get_stats(self, plate):
+        if plate not in self.history: self.history[plate] = {'arrivals': 0, 'departures': 0}
+        return self.history[plate]
+    def push(self, plate):
+        if len(self.items) >= self.capacity: return {"type": "OVERFLOW", "message": "BAY FULL"}
+        if any(v.plate == plate for v in self.items): return {"type": "DUPLICATE", "message": "ALREADY HERE"}
+        stats = self._get_stats(plate); stats['arrivals'] += 1
+        new_vehicle = Vehicle(plate, stats['arrivals'], stats['departures'])
+        self.items.append(new_vehicle)
+        return {"type": "PUSH", "index": len(self.items) - 1, "data": new_vehicle}
+    def remove_vehicle(self, plate):
+        target_index = -1
+        for i, v in enumerate(self.items):
+            if v.plate == plate: target_index = i; break
+        if target_index == -1: return [{"type": "ERROR", "message": "NOT FOUND"}]
+        events = []; current_top_index = len(self.items) - 1; temp_holding = []
+        while len(self.items) > target_index + 1:
+            v = self.items.pop(); temp_holding.append(v)
+            stats = self._get_stats(v.plate); stats['departures'] += 1
+            events.append({"type": "TEMP_POP", "data": v, "index": current_top_index})
+            current_top_index -= 1
+        target_vehicle = self.items.pop()
+        stats = self._get_stats(target_vehicle.plate); stats['departures'] += 1
+        events.append({"type": "FINAL_POP", "data": target_vehicle, "index": target_index, "stats": stats})
+        for v in reversed(temp_holding):
+            self.items.append(v)
+            stats = self._get_stats(v.plate); stats['arrivals'] += 1
+            events.append({"type": "RESTACK_PUSH", "data": v, "index": len(self.items) - 1})
+        return events
+    def get_inventory_report(self):
+        report = []
+        for v in self.items:
+            stats = self.history[v.plate]
+            report.append({"plate": v.plate, "arrivals": stats['arrivals'], "departures": stats['departures']})
+        return report
+class ParkingStackSimulation:
+    def __init__(self, screen):
+        self.screen = screen; self.logic = StackManager(capacity=10)
+        self.all_sprites = pygame.sprite.Group(); self.crates_group = pygame.sprite.Group()
+        self.ui_x = 750; self.ui_y = 0; self.ui_w = 250; self.ui_h = SCREEN_HEIGHT
+        self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
+        self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
+        self.lcd.update_status("MAINTENANCE BAY")
+        btn_cx = self.ui_x + self.ui_w // 2
+        self.btn_arrive = RoundButton(btn_cx, 280, 45, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "ARRIVE", self.action_arrive)
+        self.btn_depart = RoundButton(btn_cx, 390, 45, BTN_RED_BASE, BTN_RED_LIGHT, "DEPART", self.action_depart)
+        self.btn_summary = RoundButton(btn_cx, 500, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "MANIFEST", self.action_summary)
+        self.btn_skip = RoundButton(btn_cx, 590, 30, (100, 100, 100), (150, 150, 150), "SKIP", self.action_skip)
+        self.visual_stack = []; self.holding_stack_height = 0
+        self.last_receipt = None; self.event_queue = []
+        self.is_animating = False; self.show_summary = False
+    def draw_pallet(self, x, y, boxes=2):
+        pygame.draw.rect(self.screen, (100, 80, 50), (x, y, 30, 20))
+        pygame.draw.line(self.screen, (60, 40, 20), (x, y+10), (x+30, y+10), 2)
+        for i in range(boxes):
+            bx = x + 2 + (i*10); by = y - 10
+            pygame.draw.rect(self.screen, BOX_COLOR_1, (bx, by, 12, 12))
+            pygame.draw.rect(self.screen, (80, 60, 40), (bx, by, 12, 12), 1)
+    def draw_vent(self, x, y):
+        pygame.draw.rect(self.screen, (40, 40, 45), (x, y, 20, 20))
+        for i in range(0, 20, 4):
+            pygame.draw.line(self.screen, (30, 30, 35), (x, y+i), (x+20, y+i), 1)
+    def draw_environment(self):
+        self.screen.fill(ASPHALT_STACK_BASE)
+        for _ in range(5000):
+            color = ASPHALT_STACK_NOISE
+            self.screen.set_at((random.randint(0, 749), random.randint(0, SCREEN_HEIGHT-1)), color)
+        wall_h = 80
+        for x in range(0, 750, 10):
+            color = WALL_CORRUGATED_DARK if (x // 10) % 2 == 0 else WALL_CORRUGATED_LIGHT
+            pygame.draw.rect(self.screen, color, (x, 0, 10, wall_h))
+        pygame.draw.rect(self.screen, (20,22,25), (0, wall_h, 750, 10))
+        office_rect = pygame.Rect(325, 20, 150, 60)
+        pygame.draw.rect(self.screen, (30,35,40), office_rect, border_radius=5)
+        glow_surf = pygame.Surface((130, 40), pygame.SRCALPHA)
+        glow_surf.fill(CONTROL_ROOM_GLOW)
+        self.screen.blit(glow_surf, (335, 30))
+        pygame.draw.rect(self.screen, (100, 110, 120), office_rect, 2, border_radius=5)
+        font = pygame.font.SysFont("Arial", 8); self.screen.blit(font.render("CONTROL", True, (150, 160, 170)), (375, 22))
+        for x in [50, 150, 550, 650]:
+            pygame.draw.rect(self.screen, (20, 22, 25), (x, 30, 60, 30))
+            pygame.draw.rect(self.screen, (10, 12, 15), (x+5, 35, 50, 20))
+        pygame.draw.line(self.screen, STRIPE_YELLOW, (250, 100), (250, SCREEN_HEIGHT), 2)
+        pygame.draw.line(self.screen, STRIPE_YELLOW, (500, 100), (500, SCREEN_HEIGHT), 2)
+        slot_height = CRATE_WIDTH + PARKING_GAP
+        for i in range(10):
+            y = STACK_ZONE_BASE_Y - (i * slot_height)
+            slot_rect = pygame.Rect(STACK_ZONE_X - 10, y - CRATE_WIDTH//2, CRATE_HEIGHT + 20, CRATE_WIDTH + 10)
+            c_len = 15; col = PARKING_LINE_COLOR
+            pygame.draw.line(self.screen, col, slot_rect.topleft, (slot_rect.left + c_len, slot_rect.top), 2)
+            pygame.draw.line(self.screen, col, slot_rect.topleft, (slot_rect.left, slot_rect.top + c_len), 2)
+            pygame.draw.line(self.screen, col, (slot_rect.left, slot_rect.bottom - c_len), (slot_rect.left, slot_rect.bottom), 2)
+            pygame.draw.line(self.screen, col, (slot_rect.left - c_len//2, slot_rect.bottom), (slot_rect.left + c_len//2, slot_rect.bottom), 2)
+            pygame.draw.line(self.screen, col, slot_rect.topright, (slot_rect.right - c_len, slot_rect.top), 2)
+            pygame.draw.line(self.screen, col, slot_rect.topright, (slot_rect.right, slot_rect.top + c_len), 2)
+            pygame.draw.line(self.screen, col, (slot_rect.right, slot_rect.bottom - c_len), (slot_rect.right, slot_rect.bottom), 2)
+            pygame.draw.line(self.screen, col, (slot_rect.right - c_len//2, slot_rect.bottom), (slot_rect.right + c_len//2, slot_rect.bottom), 2)
+            num_font = pygame.font.SysFont("Arial", 10, bold=True)
+            self.screen.blit(num_font.render(str(i+1), True, (150, 150, 160)), (slot_rect.right + 15, slot_rect.centery - 5))
+        for i in range(10):
+            y = HOLDING_ZONE_Y - (i * slot_height)
+            slot_rect = pygame.Rect(HOLDING_ZONE_X - 10, y - CRATE_WIDTH//2, CRATE_HEIGHT + 20, CRATE_WIDTH + 10)
+            pygame.draw.rect(self.screen, STRIPE_YELLOW, slot_rect, 1)
+        font = pygame.font.SysFont("Impact", 18)
+        text_surf = font.render("MAINTENANCE BAY", True, STENCIL_TEXT_COLOR)
+        text_surf = pygame.transform.rotate(text_surf, 90)
+        self.screen.blit(text_surf, (STACK_ZONE_X - 40, 350))
+        text_surf = font.render("TEMP PARKING", True, STENCIL_TEXT_COLOR)
+        text_surf = pygame.transform.rotate(text_surf, 90)
+        self.screen.blit(text_surf, (HOLDING_ZONE_X + 130, 380))
+        self.draw_pallet(20, 120, boxes=1); self.draw_pallet(60, 120, boxes=2)
+        self.draw_pallet(20, 160, boxes=2); self.draw_vent(100, 130)
+        self.draw_pallet(680, 120, boxes=2); self.draw_pallet(680, 160, boxes=1)
+        self.draw_vent(640, 130)
+    def _force_park_orientation(self, sprite):
+        sprite.angle = 0
+        sprite.image = pygame.transform.rotate(sprite.original_image, 0)
+        self.process_next_event()
+    def action_arrive(self):
+        if self.is_animating or self.show_summary: return
+        plate = self.lcd.text.upper()
+        if not plate: self.lcd.update_status("ERR: NO INPUT"); return
+        receipt = self.logic.push(plate)
+        if receipt['type'] in ['OVERFLOW', 'DUPLICATE']: self.lcd.update_status(f"ERR: {receipt['message']}"); return
+        self.lcd.update_status(f"IN: {plate}"); self.lcd.text = ""
+        new_crate = CrateSprite(SPAWN_X, SPAWN_Y, receipt['data'].plate)
+        self.all_sprites.add(new_crate); self.crates_group.add(new_crate)
+        self.visual_stack.append(new_crate)
+        slot_height = CRATE_WIDTH + PARKING_GAP
+        stack_target_y = STACK_ZONE_BASE_Y - (receipt['index'] * slot_height)
+        stack_target = (STACK_ZONE_X + CRATE_HEIGHT/2, stack_target_y)
+        def drive_to_stack(): new_crate.move_to(stack_target, callback=lambda: self._force_park_orientation(new_crate))
+        self.is_animating = True
+        new_crate.move_to((RECEIVING_BAY_X, RECEIVING_BAY_Y), callback=drive_to_stack)
+    def action_depart(self):
+        if self.is_animating or self.show_summary: return
+        plate = self.lcd.text.upper()
+        if not plate: return
+        events = self.logic.remove_vehicle(plate)
+        if events[0]['type'] == 'ERROR': self.lcd.update_status(f"ERR: {events[0]['message']}"); return
+        self.lcd.update_status(f"OUT: {plate}"); self.lcd.text = ""
+        self.event_queue = events; self.is_animating = True
+        self.process_next_event()
+    def action_skip(self):
+        if not self.is_animating: return
+        # 1. Stop all movement and clear events
+        self.event_queue = []
+        # 2. HARD RESET: Clear all existing sprites to prevent duplication/clumping
+        for s in self.crates_group:
+            s.kill()
+        self.visual_stack = []
+        # 3. Regenerate sprites from Logic State (Source of Truth)
+        slot_height = CRATE_WIDTH + PARKING_GAP
+        for i, vehicle in enumerate(self.logic.items):
+            # Create fresh sprite
+            new_sprite = CrateSprite(0, 0, vehicle.plate)
+            # Calculate exact position
+            target_y = STACK_ZONE_BASE_Y - (i * slot_height)
+            new_sprite.pos_x = STACK_ZONE_X + CRATE_HEIGHT/2
+            new_sprite.pos_y = target_y
+            # Force orientation and position
+            new_sprite.rect.center = (int(new_sprite.pos_x), int(new_sprite.pos_y))
+            new_sprite.angle = 0
+            new_sprite.image = pygame.transform.rotate(new_sprite.original_image, 0)
+            new_sprite.is_moving = False
+            # Add to groups
+            self.all_sprites.add(new_sprite)
+            self.crates_group.add(new_sprite)
+            self.visual_stack.append(new_sprite)
+        # 4. Reset State
+        self.holding_stack_height = 0
+        self.is_animating = False
+        self.lcd.update_status("READY")
+    def process_next_event(self):
+        if not self.event_queue: self.on_animation_complete(); return
+        event = self.event_queue.pop(0)
+        slot_height = CRATE_WIDTH + PARKING_GAP
+        if event['type'] == 'TEMP_POP':
+            if self.visual_stack:
+                crate = self.visual_stack.pop()
+                target_y = HOLDING_ZONE_Y - (self.holding_stack_height * slot_height)
+                self.holding_stack_height += 1
+                crate.move_to((HOLDING_ZONE_X + CRATE_HEIGHT/2, target_y), callback=lambda: self._force_park_orientation(crate))
+            else: self.process_next_event()
+        elif event['type'] == 'FINAL_POP':
+            if self.visual_stack:
+                crate = self.visual_stack.pop()
+                self.last_receipt = event['stats']; self.last_receipt['plate'] = event['data'].plate
+                def cleanup(): crate.kill(); self.process_next_event()
+                crate.move_to((SHIPPING_BAY_X, SHIPPING_BAY_Y), callback=cleanup)
+            else: self.process_next_event()
+        elif event['type'] == 'RESTACK_PUSH':
+            sprite_to_move = next((s for s in self.crates_group if hasattr(s, 'plate') and s.plate == event['data'].plate), None)
+            if sprite_to_move:
+                self.holding_stack_height -= 1
+                target_y = STACK_ZONE_BASE_Y - (event['index'] * slot_height)
+                self.visual_stack.append(sprite_to_move)
+                sprite_to_move.move_to((STACK_ZONE_X + CRATE_HEIGHT/2, target_y), callback=lambda: self._force_park_orientation(sprite_to_move))
+            else: self.process_next_event()
+    def action_summary(self): self.show_summary = not self.show_summary
+    def on_animation_complete(self): self.is_animating = False; self.lcd.update_status("READY")
+    def handle_events(self, event):
+        if self.show_summary:
+            if event.type == pygame.MOUSEBUTTONDOWN: self.show_summary = False
+            return
+        self.lcd.handle_event(event); self.btn_arrive.handle_event(event)
+        self.btn_depart.handle_event(event); self.btn_summary.handle_event(event)
+        self.btn_skip.handle_event(event)
+    def update(self):
+        if self.show_summary: return
+        self.all_sprites.update(); self.lcd.update()
+    def draw_summary_overlay(self):
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT)); overlay.set_alpha(230); overlay.fill((20, 25, 30))
+        self.screen.blit(overlay, (0, 0))
+        font_title = pygame.font.SysFont("Arial", 24, bold=True); font_mono = pygame.font.SysFont("Courier New", 14)
+        pygame.draw.rect(self.screen, (50, 150, 250), (0, 40, SCREEN_WIDTH, 50))
+        title = font_title.render("WAREHOUSE INVENTORY MANIFEST", True, (255, 255, 255))
+        self.screen.blit(title, (SCREEN_WIDTH//2 - title.get_width()//2, 55))
+        headers = f"{'PLATE ID':<15} {'ARRIVALS':<10} {'DEPARTURES':<10}"
+        self.screen.blit(font_mono.render(headers, True, (100, 200, 255)), (SCREEN_WIDTH//2 - 150, 120))
+        pygame.draw.line(self.screen, (100, 200, 255), (SCREEN_WIDTH//2 - 160, 135), (SCREEN_WIDTH//2 + 160, 135), 1)
+        report = self.logic.get_inventory_report(); start_y = 150
+        for i, item in enumerate(report):
+            txt = f"{item['plate']:<15} {item['arrivals']:<10} {item['departures']:<10}"
+            col = (255, 255, 255) if i % 2 == 0 else (200, 200, 210)
+            self.screen.blit(font_mono.render(txt, True, col), (SCREEN_WIDTH//2 - 150, start_y + i*20))
+    def draw(self):
+        self.draw_environment()
+        self.all_sprites.draw(self.screen)
+        for sprite in self.crates_group:
+            label_x = sprite.rect.centerx - sprite.label_surf.get_width() // 2
+            label_y = sprite.rect.centery - 35
+            self.screen.blit(sprite.label_surf, (label_x, label_y))
+        self.chassis.draw(self.screen)
+        self.lcd.draw(self.screen)
+        self.btn_arrive.draw(self.screen)
+        self.btn_depart.draw(self.screen)
+        self.btn_summary.draw(self.screen)
+        self.btn_skip.draw(self.screen)
+        if self.show_summary:
+            self.draw_summary_overlay()
+</file>
+
+<file path="Full_Stack_Sim/simulation/site_router_tree.py/site_router_tree.py">
+import pygame
+import math
+import random
+from settings import *
+from core.sprites import CrateSprite
+from core.ui import HandheldChassis, LCDDisplay, RoundButton, Button
+class BSTNode:
+    def __init__(self, value):
+        self.value = value
+        self.left = None
+        self.right = None
+        self.x = 0
+        self.y = 0
+        self.target_x = 0
+        self.target_y = 0
+        self.push_arm_state = 'idle'
+        self.push_arm_timer = 0
+class BSTManager:
+    def __init__(self):
+        self.root = None
+        self.nodes_count = 0
+        self.max_allowed_depth = 5
+        self.current_depth = 0
+    def insert(self, value):
+        if self.root is None:
+            self.root = BSTNode(value)
+            self.nodes_count += 1
+            self.current_depth = 0
+            return {"type": "ROOT", "node": self.root}
+        current = self.root
+        depth = 0
+        path_nodes = []
+        while True:
+            path_nodes.append(current)
+            if depth >= self.max_allowed_depth:
+                return {"type": "ERROR", "message": "MAX DEPTH"}
+            if value <= current.value:
+                if current.left is None:
+                    current.left = BSTNode(value)
+                    self.nodes_count += 1
+                    self.current_depth = max(self.current_depth, depth + 1)
+                    return {
+                        "type": "INSERT", "node": current.left, "parent": current,
+                        "direction": "LEFT", "path_nodes": path_nodes
+                    }
+                current = current.left
+            else:
+                if current.right is None:
+                    current.right = BSTNode(value)
+                    self.nodes_count += 1
+                    self.current_depth = max(self.current_depth, depth + 1)
+                    return {
+                        "type": "INSERT", "node": current.right, "parent": current,
+                        "direction": "RIGHT", "path_nodes": path_nodes
+                    }
+                current = current.right
+            depth += 1
+    def clear(self):
+        self.root = None
+        self.nodes_count = 0
+        self.current_depth = 0
+    def in_order(self):
+        result = []
+        self._in_order_recursive(self.root, result)
+        return result
+    def _in_order_recursive(self, node, result):
+        if node:
+            self._in_order_recursive(node.left, result)
+            result.append(node)
+            self._in_order_recursive(node.right, result)
+    def pre_order(self):
+        result = []
+        self._pre_order_recursive(self.root, result)
+        return result
+    def _pre_order_recursive(self, node, result):
+        if node:
+            result.append(node)
+            self._pre_order_recursive(node.left, result)
+            self._pre_order_recursive(node.right, result)
+    def post_order(self):
+        result = []
+        self._post_order_recursive(self.root, result)
+        return result
+    def _post_order_recursive(self, node, result):
+        if node:
+            self._post_order_recursive(node.left, result)
+            self._post_order_recursive(node.right, result)
+            result.append(node)
+class PackageSprite(pygame.sprite.Sprite):
+    def __init__(self, start_x, start_y, value, size=30):
+        super().__init__()
+        self.value = value
+        self.pos_x = float(start_x)
+        self.pos_y = float(start_y)
+        self.target_node = None
+        self.path_queue = []
+        self.final_callback = None
+        self.is_moving = False
+        self.image = None
+        self.current_size = 0
+        self.attached_node = None
+        self.resize(size)
+        self.rect = self.image.get_rect(center=(start_x, start_y))
+    def resize(self, size):
+        s = int(size)
+        if s < 10: s = 10
+        if abs(s - self.current_size) < 1 and self.image is not None:
+            return
+        self.current_size = s
+        self.image = pygame.Surface((s, s), pygame.SRCALPHA)
+        shadow_rect = pygame.Rect(2, 2, s, s)
+        pygame.draw.rect(self.image, (0,0,0,80), shadow_rect, border_radius=3)
+        main_rect = pygame.Rect(0, 0, s, s)
+        pygame.draw.rect(self.image, BOX_COLOR_1, main_rect, border_radius=3)
+        pygame.draw.rect(self.image, (50, 30, 10, 150), main_rect, 2, border_radius=3)
+        half = s // 2
+        tape_w = max(1, int(s * 0.15))
+        pygame.draw.line(self.image, BOX_TAPE, (half, 0), (half, s), tape_w)
+        pygame.draw.line(self.image, BOX_TAPE, (0, half), (s, half), tape_w)
+        self.rect = self.image.get_rect(center=(int(self.pos_x), int(self.pos_y)))
+    def add_path(self, nodes):
+        self.path_queue.extend(nodes)
+        if not self.is_moving and self.path_queue:
+            self._start_next_leg()
+    def _start_next_leg(self):
+        if not self.path_queue: return
+        self.target_node = self.path_queue.pop(0)
+        self.is_moving = True
+    def update(self):
+        if self.attached_node:
+            self.pos_x = self.attached_node.x
+            self.pos_y = self.attached_node.y
+            self.rect.center = (int(self.pos_x), int(self.pos_y))
+            return
+        if not self.is_moving or not self.target_node: return
+        tx, ty = self.target_node.x, self.target_node.y
+        dx = tx - self.pos_x
+        dy = ty - self.pos_y
+        dist = math.sqrt(dx**2 + dy**2)
+        if dist < MIN_SPEED:
+            self.pos_x, self.pos_y = tx, ty
+            if self.path_queue:
+                if self.target_node.left or self.target_node.right:
+                    next_node = self.path_queue[0]
+                    if next_node.value <= self.target_node.value:
+                        self.target_node.push_arm_state = 'left'
+                    else:
+                        self.target_node.push_arm_state = 'right'
+                    self.target_node.push_arm_timer = 15
+                self._start_next_leg()
+            else:
+                self.is_moving = False
+                self.attached_node = self.target_node
+                self.target_node = None
+                if self.final_callback:
+                    cb = self.final_callback
+                    self.final_callback = None
+                    cb()
+        else:
+            self.pos_x += dx * LERP_FACTOR
+            self.pos_y += dy * LERP_FACTOR
+        self.rect.center = (int(self.pos_x), int(self.pos_y))
+class DroneSprite(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        self.pos_x = float(x)
+        self.pos_y = float(y)
+        self.target_x = float(x)
+        self.target_y = float(y)
+        self.is_moving = False
+        self.on_finish_callback = None
+        self.angle = 0
+        self.rotor_angle = 0
+        s = 40
+        self.original_image = pygame.Surface((s, s), pygame.SRCALPHA)
+        chassis_rect = pygame.Rect(s//2 - 12, s//2 - 12, 24, 24)
+        pygame.draw.rect(self.original_image, (50,55,60), (chassis_rect.left-5, chassis_rect.top-5, 10, 10), border_radius=2)
+        pygame.draw.rect(self.original_image, (50,55,60), (chassis_rect.right-5, chassis_rect.top-5, 10, 10), border_radius=2)
+        pygame.draw.rect(self.original_image, (50,55,60), (chassis_rect.left-5, chassis_rect.bottom-5, 10, 10), border_radius=2)
+        pygame.draw.rect(self.original_image, (50,55,60), (chassis_rect.right-5, chassis_rect.bottom-5, 10, 10), border_radius=2)
+        pygame.draw.rect(self.original_image, (0,0,0,80), chassis_rect.move(2,2), border_radius=4)
+        pygame.draw.rect(self.original_image, (180,185,190), chassis_rect, border_radius=4)
+        pygame.draw.rect(self.original_image, (100,105,110), chassis_rect, 2, border_radius=4)
+        pygame.draw.circle(self.original_image, (255, 80, 80), chassis_rect.center, 6)
+        pygame.draw.circle(self.original_image, (255, 150, 150), chassis_rect.center, 3)
+        self.image = self.original_image.copy()
+        self.rect = self.image.get_rect(center=(x, y))
+    def move_to(self, target_pos, callback=None):
+        self.target_x, self.target_y = target_pos
+        self.on_finish_callback = callback
+        self.is_moving = True
+    def update(self):
+        self.rotor_angle = (self.rotor_angle + 45) % 360
+        if not self.is_moving: return
+        dx = self.target_x - self.pos_x
+        dy = self.target_y - self.pos_y
+        dist = math.sqrt(dx**2 + dy**2)
+        self.angle = math.degrees(math.atan2(-dy, dx)) - 90
+        if dist < 3.0:
+            self.pos_x, self.pos_y = self.target_x, self.target_y
+            self.is_moving = False
+            if self.on_finish_callback:
+                cb = self.on_finish_callback
+                self.on_finish_callback = None
+                cb()
+        else:
+            self.pos_x += dx * 0.15
+            self.pos_y += dy * 0.15
+        self.rect.center = (int(self.pos_x), int(self.pos_y))
+class RouterTreeSimulation:
+    def __init__(self, screen):
+        self.screen = screen
+        self.logic = BSTManager()
+        self.all_sprites = pygame.sprite.Group()
+        self.packages_group = pygame.sprite.Group()
+        self.ui_x = 750
+        self.ui_w = 250
+        self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
+        self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
+        self.lcd.update_status("ROUTING SYSTEM")
+        btn_cx = self.ui_x + self.ui_w // 2
+        self.btn_insert = RoundButton(btn_cx, 280, 45, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "INJECT", self.action_insert)
+        self.btn_reset = RoundButton(btn_cx, 390, 45, BTN_RED_BASE, BTN_RED_LIGHT, "FLUSH", self.action_reset)
+        self.btn_scan = RoundButton(btn_cx, 500, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "TRAVERSE", self.action_open_traversal_menu)
+        self.is_animating = False
+        self.SIM_WIDTH = 750
+        self.TOP_MARGIN = 120
+        self.BOTTOM_MARGIN = 50
+        self.ROOT_X = self.SIM_WIDTH // 2
+        self.target_node_size = 80
+        self.current_node_size = 80
+        self.belt_offset = 0
+        self.bg_surface = self._generate_background()
+        self.show_traversal_menu = False
+        self.traversal_result_data = None
+        self.pending_report_data = None
+        menu_btn_w, menu_btn_h = 200, 40
+        menu_cx = self.SIM_WIDTH // 2
+        menu_start_y = 250
+        self.menu_btn_in = Button(menu_cx - menu_btn_w//2, menu_start_y, menu_btn_w, menu_btn_h, "In-Order Traversal", lambda: self.action_traverse("IN"))
+        self.menu_btn_pre = Button(menu_cx - menu_btn_w//2, menu_start_y + 50, menu_btn_w, menu_btn_h, "Pre-Order Traversal", lambda: self.action_traverse("PRE"))
+        self.menu_btn_post = Button(menu_cx - menu_btn_w//2, menu_start_y + 100, menu_btn_w, menu_btn_h, "Post-Order Traversal", lambda: self.action_traverse("POST"))
+        self.is_traversing = False
+        self.traversal_path = []
+        self.traversal_index = 0
+        self.highlighted_node = None
+        self.highlight_timer = 0
+        self.drone = DroneSprite(-50, -50)
+        self.all_sprites.add(self.drone)
+    def _generate_background(self):
+        surf = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT))
+        surf.fill(FLOOR_COLOR)
+        for _ in range(15000):
+            color = random.choice([CONCRETE_NOISE_1, CONCRETE_NOISE_2])
+            surf.set_at((random.randint(0, self.SIM_WIDTH-1), random.randint(0, SCREEN_HEIGHT-1)), color)
+        for _ in range(20):
+            p1 = (random.randint(0, self.SIM_WIDTH-1), random.randint(0, SCREEN_HEIGHT-1))
+            p2 = (p1[0] + random.randint(-40, 40), p1[1] + random.randint(-40, 40))
+            pygame.draw.line(surf, CRACK_COLOR, p1, p2, 1)
+        for y in range(0, SCREEN_HEIGHT, 40):
+            pygame.draw.line(surf, (255, 200, 0, 50), (20, y), (20, y + 20), 3)
+            pygame.draw.line(surf, (255, 200, 0, 50), (self.SIM_WIDTH - 20, y), (self.SIM_WIDTH - 20, y + 20), 3)
+        self._draw_shelf_unit(surf, -80, 0, 120, SCREEN_HEIGHT, 10)
+        self._draw_shelf_unit(surf, self.SIM_WIDTH - 40, 0, 120, SCREEN_HEIGHT, 10)
+        door_w, door_h = 150, 30
+        door_x = self.SIM_WIDTH // 2 - door_w // 2
+        pygame.draw.rect(surf, (40,40,40), (door_x, 0, door_w, door_h))
+        for i in range(0, door_w, 15):
+            pygame.draw.line(surf, (60,60,60), (door_x + i, 0), (door_x + i, door_h), 1)
+        pygame.draw.rect(surf, STRIPE_YELLOW, (door_x, 0, door_w, door_h), 3)
+        light_layer = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        for i in range(4):
+            lx = 100 + i * 200
+            points = [(lx - 40, 0), (lx + 40, 0), (lx + 100, SCREEN_HEIGHT), (lx - 100, SCREEN_HEIGHT)]
+            pygame.draw.polygon(light_layer, LIGHT_RAY_COLOR, points)
+        surf.blit(light_layer, (0,0))
+        return surf
+    def _draw_shelf_unit(self, surf, x, y, w, h, rows):
+        for r in range(rows):
+            ry = y + r * (h/rows)
+            shelf_rect = pygame.Rect(x, ry, w, h/rows)
+            pygame.draw.rect(surf, (80,85,90), shelf_rect)
+            pygame.draw.rect(surf, (40,45,50), shelf_rect, 1)
+            for i in range(10):
+                box_w = random.randint(10, 30)
+                box_h = random.randint(10, 20)
+                box_x = x + random.randint(5, w - box_w - 5)
+                box_y = ry + (h/rows) - box_h - 2
+                color = random.choice([BOX_COLOR_1, BOX_COLOR_2, (160, 110, 50)])
+                pygame.draw.rect(surf, color, (box_x, box_y, box_w, box_h))
+                pygame.draw.rect(surf, (0,0,0,50), (box_x, box_y, box_w, box_h), 1)
+    def _recalculate_layout(self, node, x, y, level, width_spread):
+        if node is None: return
+        node.target_x = x
+        node.target_y = y
+        depth = self.logic.current_depth
+        total_height = SCREEN_HEIGHT - self.TOP_MARGIN - self.BOTTOM_MARGIN
+        level_height = total_height / max(1, depth + 1)
+        next_spread = width_spread / 2
+        self._recalculate_layout(node.left, x - next_spread, y + level_height, level + 1, next_spread)
+        self._recalculate_layout(node.right, x + next_spread, y + level_height, level + 1, next_spread)
+    def _update_node_positions(self, node):
+        if node is None: return
+        dx = node.target_x - node.x
+        dy = node.target_y - node.y
+        if abs(dx) > 0.1 or abs(dy) > 0.1:
+            node.x += dx * 0.1
+            node.y += dy * 0.1
+        else:
+            node.x, node.y = node.target_x, node.target_y
+        if node.push_arm_timer > 0:
+            node.push_arm_timer -= 1
+            if node.push_arm_timer == 0:
+                node.push_arm_state = 'idle'
+        self._update_node_positions(node.left)
+        self._update_node_positions(node.right)
+    def draw_conveyor_line(self, start, end):
+        dist = math.hypot(end[0]-start[0], end[1]-start[1])
+        if dist == 0: return
+        angle = math.atan2(end[1]-start[1], end[0]-start[0])
+        perp_angle = angle + math.pi / 2
+        w = self.current_node_size * 0.4
+        dx, dy = math.cos(perp_angle) * w/2, math.sin(perp_angle) * w/2
+        points = [
+            (start[0] - dx, start[1] - dy), (start[0] + dx, start[1] + dy),
+            (end[0] + dx, end[1] + dy), (end[0] - dx, end[1] - dy)
+        ]
+        pygame.draw.polygon(self.screen, (40,40,45), points)
+        num_stripes = int(dist / 20)
+        if num_stripes > 0:
+            for i in range(num_stripes + 2):
+                t = (i - self.belt_offset / 20) / num_stripes
+                if 0 <= t <= 1:
+                    px1 = start[0] + (end[0]-start[0]) * t
+                    py1 = start[1] + (end[1]-start[1]) * t
+                    pygame.draw.line(self.screen, (60,60,65), (px1 - dx, py1 - dy), (px1 + dx, py1 + dy), 2)
+        pygame.draw.line(self.screen, (90,95,100), points[0], points[3], 5)
+        pygame.draw.line(self.screen, (90,95,100), points[1], points[2], 5)
+    def draw_tree_nodes_and_labels(self, node):
+        if node is None: return
+        if node.left:
+            self.draw_conveyor_line((node.x, node.y), (node.left.x, node.left.y))
+            self.draw_tree_nodes_and_labels(node.left)
+        if node.right:
+            self.draw_conveyor_line((node.x, node.y), (node.right.x, node.right.y))
+            self.draw_tree_nodes_and_labels(node.right)
+        s = int(self.current_node_size)
+        rect = pygame.Rect(0, 0, s, s)
+        rect.center = (node.x, node.y)
+        base_rect = rect.inflate(s*0.2, s*0.2)
+        pygame.draw.rect(self.screen, (30,30,35), base_rect.move(3,3), border_radius=5)
+        pygame.draw.rect(self.screen, (80,85,90), base_rect, border_radius=5)
+        arm_w, arm_h = s * 0.8, s * 0.2
+        arm_rect = pygame.Rect(0,0, arm_w, arm_h)
+        arm_rect.centery = base_rect.centery
+        if node.push_arm_state == 'left':
+            arm_rect.right = base_rect.centerx - 5
+        elif node.push_arm_state == 'right':
+            arm_rect.left = base_rect.centerx + 5
+        else:
+            arm_rect.centerx = base_rect.centerx
+        pygame.draw.rect(self.screen, (255, 200, 0), arm_rect)
+        pygame.draw.rect(self.screen, (180, 140, 0), arm_rect, 2)
+        pygame.draw.rect(self.screen, (150,155,160), rect, border_radius=3)
+        if self.highlighted_node == node and self.highlight_timer > 0:
+            pygame.draw.rect(self.screen, (255, 255, 0), base_rect, 3, border_radius=5)
+        font_size = max(14, int(s * 0.5))
+        font = pygame.font.SysFont("Impact", font_size)
+        txt = font.render(str(node.value), True, (20, 20, 20))
+        self.screen.blit(txt, (rect.centerx - txt.get_width()//2, rect.centery - txt.get_height()//2))
+    def action_insert(self):
+        if self.is_animating or self.is_traversing: return
+        text = self.lcd.text
+        if not text.isdigit():
+            self.lcd.update_status("ERR: INTEGERS ONLY"); return
+        val = int(text)
+        if val > 999:
+            self.lcd.update_status("ERR: MAX 999"); return
+        receipt = self.logic.insert(val)
+        if receipt['type'] == 'ERROR':
+            self.lcd.update_status(f"ERR: {receipt['message']}"); return
+        self.lcd.update_status(f"ROUTING: {val}"); self.lcd.text = ""
+        self.is_animating = True
+        if receipt['type'] != 'ROOT':
+            new_node = receipt['node']; parent = receipt['parent']
+            new_node.x, new_node.y = parent.x, parent.y
+        pkg = PackageSprite(self.ROOT_X, 40, val, size=self.current_node_size * 0.7)
+        self.all_sprites.add(pkg); self.packages_group.add(pkg)
+        hopper_node = BSTNode(0); hopper_node.x = self.ROOT_X; hopper_node.y = self.TOP_MARGIN
+        path_nodes = [hopper_node]
+        if receipt['type'] != 'ROOT':
+            path_nodes.extend(receipt['path_nodes']); path_nodes.append(receipt['node'])
+        pkg.final_callback = self.on_animation_complete; pkg.add_path(path_nodes)
+    def action_reset(self):
+        if self.is_traversing: return
+        self.logic.clear(); self.all_sprites.empty(); self.packages_group.empty()
+        self.drone = DroneSprite(-50, -50); self.all_sprites.add(self.drone)
+        self.is_animating = False; self.lcd.update_status("SYSTEM FLUSHED")
+    def on_animation_complete(self):
+        self.is_animating = False; self.lcd.update_status("READY")
+    def action_open_traversal_menu(self):
+        if self.is_animating or self.is_traversing or not self.logic.root: return
+        self.show_traversal_menu = True
+    def action_traverse(self, order_type):
+        self.show_traversal_menu = False
+        path = []
+        title = ""
+        if order_type == "IN":
+            path = self.logic.in_order()
+            title = "IN-ORDER SCAN MANIFEST"
+        elif order_type == "PRE":
+            path = self.logic.pre_order()
+            title = "PRE-ORDER SCAN MANIFEST"
+        elif order_type == "POST":
+            path = self.logic.post_order()
+            title = "POST-ORDER SCAN MANIFEST"
+        self.traversal_path = path
+        self.pending_report_data = {
+            "title": title,
+            "path": " ".join([str(node.value) for node in path])
+        }
+        self.is_traversing = True
+        self.traversal_index = 0
+        self.drone.pos_x, self.drone.pos_y = self.ROOT_X, 20
+        self.lcd.update_status("SCANNING...")
+        self.process_next_traversal_step()
+    def process_next_traversal_step(self):
+        if self.traversal_index >= len(self.traversal_path):
+            self.on_traversal_complete()
+            return
+        node_to_visit = self.traversal_path[self.traversal_index]
+        self.drone.move_to((node_to_visit.x, node_to_visit.y), callback=self.on_drone_arrival)
+    def on_drone_arrival(self):
+        node = self.traversal_path[self.traversal_index]
+        self.highlighted_node = node
+        self.highlight_timer = 20
+        self.traversal_index += 1
+        self.process_next_traversal_step()
+    def on_traversal_complete(self):
+        self.is_traversing = False
+        self.traversal_path = []
+        self.traversal_index = 0
+        self.drone.move_to((-50, -50))
+        self.lcd.update_status("SCAN COMPLETE")
+        self.traversal_result_data = self.pending_report_data
+        self.pending_report_data = None
+    def handle_events(self, event):
+        if self.show_traversal_menu:
+            self.menu_btn_in.handle_event(event)
+            self.menu_btn_pre.handle_event(event)
+            self.menu_btn_post.handle_event(event)
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if not (self.menu_btn_in.is_hovered or self.menu_btn_pre.is_hovered or self.menu_btn_post.is_hovered):
+                    self.show_traversal_menu = False
+            return
+        if self.traversal_result_data and not self.is_traversing:
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                self.traversal_result_data = None
+                self.lcd.update_status("READY")
+            return
+        self.lcd.handle_event(event)
+        self.btn_insert.handle_event(event)
+        self.btn_reset.handle_event(event)
+        self.btn_scan.handle_event(event)
+    def update(self):
+        if self.show_traversal_menu: return
+        self.belt_offset = (self.belt_offset + 1) % 20
+        if self.highlight_timer > 0:
+            self.highlight_timer -= 1
+            if self.highlight_timer == 0:
+                self.highlighted_node = None
+        depth = self.logic.current_depth
+        num_slots = 2 ** depth
+        slot_width = self.SIM_WIDTH / max(1, num_slots)
+        self.target_node_size = int(slot_width * 0.50)
+        if self.target_node_size > 80: self.target_node_size = 80
+        if self.target_node_size < 20: self.target_node_size = 20
+        size_diff = self.target_node_size - self.current_node_size
+        if abs(size_diff) > 0.1: self.current_node_size += size_diff * 0.1
+        else: self.current_node_size = self.target_node_size
+        initial_spread = self.SIM_WIDTH / 2
+        self._recalculate_layout(self.logic.root, self.ROOT_X, self.TOP_MARGIN, 0, initial_spread)
+        self._update_node_positions(self.logic.root)
+        current_pkg_size = self.current_node_size * 0.7
+        for pkg in self.packages_group:
+            pkg.resize(current_pkg_size)
+        self.all_sprites.update()
+        self.lcd.update()
+    def draw_traversal_menu(self):
+        overlay = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+        font_title = pygame.font.SysFont("Impact", 30)
+        title_surf = font_title.render("SELECT TRAVERSAL METHOD", True, WHITE)
+        self.screen.blit(title_surf, (self.SIM_WIDTH//2 - title_surf.get_width()//2, 180))
+        self.menu_btn_in.draw(self.screen)
+        self.menu_btn_pre.draw(self.screen)
+        self.menu_btn_post.draw(self.screen)
+    def draw_traversal_result(self):
+        overlay = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+        w, h = 500, 220
+        x, y = (self.SIM_WIDTH - w) // 2, (SCREEN_HEIGHT - h) // 2
+        pygame.draw.rect(self.screen, (0,0,0,80), (x+5, y+5, w, h), border_radius=3)
+        pygame.draw.rect(self.screen, (230, 230, 220), (x, y, w, h), border_radius=3)
+        pygame.draw.rect(self.screen, (100,100,100), (x,y,w,h), 1, border_radius=3)
+        font_header = pygame.font.SysFont("Courier New", 18, bold=True)
+        header_surf = font_header.render(self.traversal_result_data["title"], True, (30,30,30))
+        self.screen.blit(header_surf, (x + w//2 - header_surf.get_width()//2, y + 20))
+        pygame.draw.line(self.screen, (180,180,170), (x+20, y+50), (x+w-20, y+50), 1)
+        font_result = pygame.font.SysFont("Courier New", 24, bold=True)
+        words = self.traversal_result_data["path"].split(' ')
+        lines = []
+        current_line = ""
+        for word in words:
+            test_line = current_line + word + " "
+            if font_result.size(test_line)[0] < w - 40:
+                current_line = test_line
+            else:
+                lines.append(current_line)
+                current_line = word + " "
+        lines.append(current_line)
+        line_y = y + 70
+        for line in lines:
+            result_surf = font_result.render(line, True, (40, 40, 40))
+            self.screen.blit(result_surf, (x + 20, line_y))
+            line_y += 30
+        if not self.is_traversing:
+            font_prompt = pygame.font.SysFont("Arial", 12)
+            prompt_surf = font_prompt.render("Click anywhere to dismiss", True, (150, 150, 150))
+            self.screen.blit(prompt_surf, (x + w - prompt_surf.get_width() - 10, y + h - prompt_surf.get_height() - 10))
+    def draw(self):
+        self.screen.blit(self.bg_surface, (0, 0))
+        self.draw_tree_nodes_and_labels(self.logic.root)
+        self.all_sprites.draw(self.screen)
+        for pkg in self.packages_group:
+            font_size = max(12, int(pkg.current_size * 0.5))
+            font = pygame.font.SysFont("Arial", font_size, bold=True)
+            shadow = font.render(str(pkg.value), True, (0,0,0,100))
+            self.screen.blit(shadow, (pkg.rect.centerx - shadow.get_width()//2 + 1, pkg.rect.centery - shadow.get_height()//2 + 1))
+            label = font.render(str(pkg.value), True, (255, 255, 255))
+            self.screen.blit(label, (pkg.rect.centerx - label.get_width()//2, pkg.rect.centery - label.get_height()//2))
+        self.chassis.draw(self.screen)
+        self.lcd.draw(self.screen)
+        self.btn_insert.draw(self.screen)
+        self.btn_reset.draw(self.screen)
+        self.btn_scan.draw(self.screen)
+        if self.show_traversal_menu:
+            self.draw_traversal_menu()
+        elif self.traversal_result_data:
+            self.draw_traversal_result()
+</file>
+
+<file path="FullStack Project Bible.ipynb/FullStack Project Bible.ipynb">
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": []
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    }
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# 📦 Project Design Document: \"Full Stack Logistics\"\n",
+        "### CMPE 201: Data Structures Visualization Project\n",
+        "**Theme:** Industrial Logistics Simulator / Warehouse Management\n",
+        "**Engine:** Python + Pygame Community Edition (CE)\n",
+        "**Tone:** \"Manage the Chaos. Deliver Efficiency.\"\n",
+        "\n",
+        "---\n"
+      ],
+      "metadata": {
+        "id": "xPWqddUSvZOO"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## 1. Project Identity: \"Full Stack\"\n",
+        "The name \"Full Stack\" is the unifying conceptual thread. We are not just building graphs; we are managing the logic behind a massive distribution center.\n",
+        "\n",
+        "*   **The Vibe:** *Factorio* meets *Euro Truck Simulator* meets *VS Code*.\n",
+        "*   **The Metaphor:**\n",
+        "    *   **Data** = Cargo (Crates, Containers, Trucks).\n",
+        "    *   **Memory** = The Warehouse Floor.\n",
+        "    *   **Pointers** = Tow Hitches / Conveyor Belts.\n",
+        "    *   **Algorithms** = Automation Robots.\n",
+        "\n",
+        "---\n",
+        "\n"
+      ],
+      "metadata": {
+        "id": "-D3fO4BJvnnm"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## 2. Technical Architecture\n",
+        "We will use the **Model-View-Controller (MVC)** pattern to ensure clean code for the panelists.\n",
+        "\n",
+        "### The Stack\n",
+        "*   **Language:** Python 3.x\n",
+        "*   **Graphics:** `pygame-ce` (for the Game Loop, sprites, and animation).\n",
+        "*   **UI Elements:** `pygame_gui` (Optional, or custom built classes for clean input boxes).\n",
+        "\n",
+        "### Folder Structure\n",
+        "```text\n",
+        "Full_Stack_Sim/\n",
+        "│\n",
+        "├── main.py                   # entry_point: Launches the \"Terminal\"\n",
+        "├── settings.py               # config: Colors, Resolutions, Assets paths\n",
+        "│\n",
+        "├── assets/                   # images: cargo.png, forklift.png, truck_sprite.png\n",
+        "│\n",
+        "├── core/                     # VISUAL ENGINE\n",
+        "│   ├── engine.py             # Pygame setup, Scene Manager\n",
+        "│   ├── sprites.py            # Classes: Truck, Crate, Drone, Pallet\n",
+        "│   ├── ui.py                 # Classes: TerminalButton, DataDisplay\n",
+        "│\n",
+        "└── simulation/               # LOGIC MODULES (The \"Levels\")\n",
+        "    ├── site_parking_stack.py # STACK logic & visualization\n",
+        "    ├── site_parking_queue.py # QUEUE logic & visualization\n",
+        "    ├── site_warehouse_arr.py # ARRAYS logic & visualization\n",
+        "    ├── site_convoy_list.py   # LINKED LIST logic & visualization\n",
+        "    ├── site_sort_floor.py    # SORTING logic & visualization\n",
+        "    ├── site_router_tree.py   # BST logic & visualization\n",
+        "    └── site_recursion_lab.py # RECURSION logic & visualization"
+      ],
+      "metadata": {
+        "id": "NR9kuJg8vrZa"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "---\n",
+        "## 3. Global Assets & Config\n",
+        "\n",
+        "**Visual Style Guide:**\n",
+        "*   **Font:** *Courier New* or *Roboto Mono* (Terminal look).\n",
+        "*   **Background:** `#2D3436` (Asphalt Grey).\n",
+        "*   **Lines/UI:** `#FFEAA7` (Safety Yellow).\n",
+        "*   **Accent (Active):** `#0984E3` (Blueprint Blue).\n",
+        "*   **Accent (Error):** `#D63031` (Hazard Red).\n",
+        "\n",
+        "**Sprite Needs (2D Top-Down):**\n",
+        "1.  **Truck:** Top-down view of a semi-cab.\n",
+        "2.  **Container:** Rectangular box (various colors for Sorting).\n",
+        "3.  **Forklift:** Small square sprite for Arrays.\n",
+        "4.  **Diverter Node:** Circle with arrows for BST.\n",
+        "\n",
+        "---\n",
+        "\n"
+      ],
+      "metadata": {
+        "id": "08tWlpiwwMd4"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## 4. Module Specifications (The \"Levels\")\n",
+        "\n",
+        "### Level A: The \"Vertical Bay\" (Stack)\n",
+        "*Goal: Manage a narrow, high-density maintenance bay.*\n",
+        "\n",
+        "*   **The Logic (LIFO):** Cars (Trucks) enter a one-way repair lane. Last truck in blocks the exit.\n",
+        "*   **Visual Setup:** A vertical lane walls on Left/Right/Top. Entry is at the Bottom.\n",
+        "*   **The \"Full Stack\" Mechanic (Departure):**\n",
+        "    *   **User Action:** \"Release Truck Plate [XYZ] (blocked by 2 others)\".\n",
+        "    *   **Animation Phase 1 (The Shuffle):** The 2 blocking trucks drive OUT into a \"Temporary Holding Zone\" drawn on the side.\n",
+        "    *   **Animation Phase 2 (The Exit):** The target [XYZ] truck drives out and off-screen.\n",
+        "    *   **Animation Phase 3 (The Restack):** The 2 blocking trucks drive back in from the Holding Zone to fill the gap.\n",
+        "    *   *Why this works:* It visually proves the \"Pop\" cost of a Stack.\n",
+        "\n",
+        "### Level B: The \"Loopback Checkpoint\" (Queue)\n",
+        "*Goal: Manage a Customs weigh station.*\n",
+        "\n",
+        "*   **The Logic (FIFO):** A horizontal lane. First truck enters -> First truck leaves.\n",
+        "*   **Visual Setup:** Horizontal lane. Entrance (Left), Exit Gate (Right). **CRITICAL:** A U-turn road connects the Exit back to the Entrance.\n",
+        "*   **The \"Blocked\" Mechanic:**\n",
+        "    *   **User Action:** \"Expel Truck Plate [ABC] (Middle of line)\".\n",
+        "    *   **Animation:** The front trucks depart the gate, take the U-turn road, and rejoin the back of the line (Cycling).\n",
+        "    *   **Trigger:** Once [ABC] is at the front, the gate opens and it drives straight (off-screen) instead of taking the loop.\n",
+        "\n",
+        "### Level C: The \"Smart Rack\" (Arrays)\n",
+        "*Goal: Automated shelving system.*\n",
+        "\n",
+        "*   **Visual Setup:** A long industrial shelf labeled Index 0-9.\n",
+        "*   **Logic:**\n",
+        "    *   **Insert:** A specialized Forklift travels to Index `i` and places a crate.\n",
+        "    *   **Delete:** Forklift travels to Index `i` and removes crate.\n",
+        "    *   **Access:** A spotlight scans horizontally until it hits Index `i` (flashing green).\n",
+        "\n",
+        "### Level D: The \"Convoy\" (Linked Lists)\n",
+        "*Goal: Managing a chain of connected vehicles.*\n",
+        "\n",
+        "*   **Visual Setup:** Highway background. Trucks driving in a line.\n",
+        "*   **Visualizing Pointers:** Draw a thick \"Cable\" or \"Hitch\" connecting the back of Truck A to the front of Truck B.\n",
+        "*   **Logic (Insert Middle):**\n",
+        "    *   Truck A disconnects cable from Truck B.\n",
+        "    *   New Truck C drives into the gap.\n",
+        "    *   Cable Connects A -> C.\n",
+        "    *   Cable Connects C -> B.\n",
+        "\n",
+        "### Level E: The \"Sorter Belt\" (Sorting)\n",
+        "*Goal: Organize containers by weight/height before shipping.*\n",
+        "\n",
+        "*   **Visual Setup:** A conveyor belt. Crates are rectangles of varying HEIGHTS (simulating values).\n",
+        "*   **Animation (Bubble/Selection):**\n",
+        "    *   Use a \"Gantry Crane\" (a rectangle above the crates).\n",
+        "    *   When swapping two crates, smoothly slide them past each other (Don't teleport!).\n",
+        "    *   **Status Colors:** Turn bars `Red` when comparing, `Green` when locked in place.\n",
+        "\n",
+        "### Level F: The \"Routing Floor\" (BST)\n",
+        "*Goal: Automated package diverter system.*\n",
+        "\n",
+        "*   **Visual Setup:** Isometric view. \"Nodes\" are Circular Conveyor Junctions. \"Edges\" are Belts.\n",
+        "*   **Interaction (Insertion):**\n",
+        "    *   A package labeled \"50\" enters Root (Val 40).\n",
+        "    *   Junction shows display: `50 > 40`.\n",
+        "    *   Diverter Arm activates, pushing package to the RIGHT belt.\n",
+        "*   **Interaction (Traversal):**\n",
+        "    *   A \"System Drone\" flies over the belts. As it hovers over a junction (Node), the Node lights up White.\n",
+        "    *   This sequence produces the print log (LRT, LTR, etc).\n",
+        "\n",
+        "### Level G: The \"Automation Lab\" (Recursion)\n",
+        "*Goal: Experimental robotics.*\n",
+        "\n",
+        "1.  **Tower of Hanoi:**\n",
+        "    *   **The \"Crane Game\":** Three cargo landing pads.\n",
+        "    *   **Visuals:** Crates are stacked wide-to-narrow. A magnetic crane lifts them.\n",
+        "    *   **Logic:** Recursion algorithm controls the crane coordinates.\n",
+        "2.  **Factorial/Fib:**\n",
+        "    *   **Visual:** \"Recursive Crates.\" A crate opens to reveal a smaller crate, which opens to reveal a smaller crate (Russian Nesting Doll style).\n",
+        "\n",
+        "---\n",
+        "\n"
+      ],
+      "metadata": {
+        "id": "FQv0VOY7xAgk"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## 5. Implementation Roadmap (Dev Plan)\n",
+        "\n",
+        "**Phase 1: The Frame (Days 1-2)**\n",
+        "*   Build `main.py` window using Pygame.\n",
+        "*   Create the \"Full Stack Management Terminal\" (Main Menu) using simple rect buttons.\n",
+        "*   Create `Truck` sprite class.\n",
+        "\n",
+        "**Phase 2: The Core Parking (Days 3-4)**\n",
+        "*   Implement `site_parking_stack.py`. **Priority:** Focus on the \"blocked car\" logic (moving to holding zone).\n",
+        "*   Implement `site_parking_queue.py`. **Priority:** Focus on the \"Loopback\" animation.\n",
+        "\n",
+        "**Phase 3: The Structures (Days 5-6)**\n",
+        "*   Linked List Convoy (visualizing the hitch connection).\n",
+        "*   BST Conveyor Belts (visualizing the \"Right/Left\" choice).\n",
+        "\n",
+        "**Phase 4: Polish (Day 7)**\n",
+        "*   Add the sound effects (Truck horns, hydraulic hisses).\n",
+        "*   Add the Title Screen Logo: \"FULL STACK\" in ASCII or Pixel art.\n",
+        "\n",
+        "---\n"
+      ],
+      "metadata": {
+        "id": "-_cygfuZxQKU"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "\n",
+        "## 6. AI Generation Prompts\n",
+        "*Use this specific system prompt when generating code to ensure consistency.*\n",
+        "\n",
+        "> * **Role:** You are the Lead Developer for a project called \"Full Stack Logistics.\"\n",
+        "> * **Theme:** We are building a Pygame visualization where Data Structures are represented as Warehouse/Industrial operations.\n",
+        "> * **Constraint:** Do not use `time.sleep()`. All movement must be incremental within the Pygame `while running` loop.\n",
+        "> * **Architecture:** Use Class-based Logic. Logic (Python Class) must be decoupled from the Visualization (Sprite Class).\n",
+        "> * **Task:** [Insert specific task here, e.g., \"Write the Queue Visualization where trucks loop back to the start if skipped.\"]"
+      ],
+      "metadata": {
+        "id": "mKR9qTRPxU6w"
+      }
+    }
+  ]
+}
+</file>
+
+<file path="README.txt/README.txt">
+PROJECT: Full Stack Logistics Simulator
+THEME: Industrial Visualization of Data Structures (Warehouse Management System)
+ENGINE: Python 3.x / Pygame
+
+DESCRIPTION:
+A visualization tool that represents computer science data structures as 
+realistic logistics operations. The project uses a "Sim-Style" aesthetic,
+rendering high-detail procedural assets (trucks, cargo, environment) entirely
+via code.
+
+The interface mimics a rugged industrial handheld scanner (WMS Unit), 
+providing an immersive way to interact with the algorithms.
+
+CURRENT MODULES:
+
+1. LEVEL 1 - THE VERTICAL PARKING BAY (STACK)
+   - Logic: LIFO (Last In, First Out).
+   - Setting: A rugged maintenance hangar with textured asphalt floors.
+   - Metaphor: A narrow bay where the last truck in blocks the exit.
+   - Animation: Blocking trucks automatically "shuffle" to a holding zone.
+
+2. LEVEL 2 - THE WEIGH STATION (QUEUE)
+   - Logic: FIFO (First In, First Out).
+   - Setting: High-detail Industrial Yard (Asphalt, Fences, Shipping Containers).
+   - Metaphor: A highway weigh station.
+   - Animation: "Loopback" road for trucks cycling to the back of the line.
+
+3. LEVEL 3 - THE CONVEYOR BELT (LINKED LIST)
+   - Logic: Singly Linked List (Insert/Remove at Index).
+   - Setting: Factory floor with volumetric lighting ("god rays").
+   - Metaphor: Boxes on a conveyor represent nodes, linked by logical chains.
+   - Interaction: "Click-to-Place" insertion mechanics.
+
+4. LEVEL 4 - THE ROUTING FLOOR (BINARY SEARCH TREE)
+   - Logic: Binary Search Tree (Recursive Insertion).
+   - Setting: Automated sorting facility with diverter arms.
+   - Metaphor: Packages travel down a branching conveyor system based on ID value.
+   - Features: 
+     - Dynamic Layout Engine: The tree automatically resizes and "zooms out" 
+       as it gets deeper to fit the screen.
+     - Anti-Overlap System: Nodes calculate safe spacing to prevent collisions.
+
+DIRECTORY STRUCTURE:
+Full_Stack_Sim/
+├── main.py                   # Entry Point (Main Menu & Scene Switcher)
+├── settings.py               # Config, Palettes, Physics Constants
+├── core/                     # Shared Engine Code
+│   ├── sprites.py            # Procedural Asset Generators
+│   └── ui.py                 # Rugged UI System
+└── simulation/               # Level Logic
+    ├── site_parking_stack.py # Level 1: Stack
+    ├── site_parking_queue.py # Level 2: Queue
+    ├── site_conveyor_list.py # Level 3: Linked List
+    └── site_router_tree.py   # Level 4: BST
+
+HOW TO RUN:
+1. Ensure Python 3.x and Pygame are installed (`pip install pygame`).
+2. Run: `python main.py`
+3. Select a Module from the Main Menu.
+
+CONTROLS (HANDHELD UNIT):
+- LCD Screen: Type Label/ID (Integers for BST).
+- GREEN BUTTON: Add Item (Append, Enqueue, or Inject).
+- RED BUTTON: Remove Item (Depart, Dequeue, or Flush System).
+- BLUE BUTTON: Context specific (Manifest/Insert At).
+- GRAY BUTTON: Skip Animation (Stack/Queue only).
+</file>
+
+<file path="ROADMAP.txt/ROADMAP.txt">
+PROJECT ROADMAP
+
+PHASE 1: THE STACK (VERTICAL MAINTENANCE BAY) - [COMPLETED]
+[x] Core Architecture (MVC Pattern).
+[x] Logic: LIFO Stack with "Shuffle" algorithm.
+[x] UI Overhaul: Integrated Rugged Handheld Interface.
+[x] Feature: "Skip Animation" button for instant state synchronization.
+
+PHASE 2: THE QUEUE (THE WEIGH STATION) - [COMPLETED]
+[x] Logic: FIFO Queue with "Cycling" algorithm (Loopback).
+[x] Logic Fix: Loopback trucks now correctly count towards Arrival/Departure stats.
+[x] Visuals: High-Fidelity Industrial Yard with procedural props.
+[x] Polish: Removed visual artifacts (skid marks) from road corners.
+
+PHASE 3: LINKED LIST (THE CONVEYOR BELT) - [COMPLETED]
+[x] Metaphor: Re-themed from "Convoy" to "Conveyor Belt" with boxes.
+[x] Logic: Singly Linked List with Insert/Delete At Index.
+[x] Visuals: High-detail warehouse with volumetric lighting.
+[x] Interaction: Implemented intuitive "Click-to-Place" mouse interaction.
+
+PHASE 4: TREES (THE ROUTING FLOOR) - [COMPLETED]
+[x] Logic: Binary Search Tree insertion.
+[x] Visuals: Top-down view of a sorting facility with diverter arms.
+[x] Smart Layout: Implemented "Smooth Zoom" system.
+    - Tree starts large and readable.
+    - Automatically shrinks and repositions as depth increases.
+    - 50% Fill Rate algorithm guarantees zero overlap at max depth.
+[x] Animation: Packages travel along dynamic paths, following nodes as they resize.
+
+PHASE 5: SORTING ALGORITHMS - [NEXT PRIORITY]
+[ ] The Sorting Floor (Gantry Crane System).
+    - Metaphor: A row of shipping containers.
+    - Logic: Bubble Sort / Selection Sort.
+    - Visuals: An overhead Gantry Crane that picks up and swaps containers.
+    - Highlights: Color-coded comparisons (Red = Compare, Green = Sorted).
+</file>
+
+</files>
