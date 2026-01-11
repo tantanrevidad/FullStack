@@ -102,50 +102,43 @@ ARCHITECTURE GUIDELINES
    - Core Engine (`core/`): Rendering engines (`sprites.py`) and UI system (`ui.py`).
    - Simulation Modules (`simulation/`): Self-contained "Site" files. Each site file
      encapsulates both the specific data structure logic and its corresponding
-     Pygame visualization class for improved modularity.
-   - Controller (`main.py`): State Machine to switch between Menu and simulation sites.
+     Pygame visualization class.
+   - Controller (`main.py`): A robust State Machine handling the "Facility Overview,"
+     scene transitions, and global display settings (Fullscreen/Scaling).
 
 2. LOGIC LAYER (The Backend)
-   - Class: `StackManager` (LIFO) -> Returns `TEMP_POP` / `RESTACK_PUSH` events.
-   - Class: `QueueManager` (FIFO) -> Returns `CYCLE` / `DEPART` events.
-   - Class: `LinkedListManager` -> Manages `Node` objects with `next` pointers.
-   - Class: `BSTManager` -> Manages recursive `BSTNode` structure for searching.
-   - Class: `ExpressionTreeManager` -> Shunting-yard algorithm & Tree building.
-   - Class: `SortingManager` -> Generates step-by-step plans for sorting algorithms.
-   - Class: `RecursionManager` -> Solves Tower of Hanoi states.
-   - Class: `ArrayManager` -> 
-     - Manages a fixed-size list with direct index access.
-     - Handles resizing logic and data persistence during resize.
-     - Returns explicit `WRITE`, `READ`, and `CLEAR` receipts.
+   - Pure Python classes decoupled from Pygame.
+   - `StackManager` / `QueueManager`: Handle LIFO/FIFO operations and return event logs.
+   - `LinkedListManager`: Manages Node pointers.
+   - `BSTManager` / `ExpressionTreeManager`: Handle recursive tree structures.
+   - `SortingManager`: Generates step-by-step animation frames for algorithms.
+   - `RecursionManager`: Solves Hanoi states.
+   - `ArrayManager`: Manages fixed-size lists with explicit Read/Write receipts.
 
 3. VISUALIZATION LAYER (The Frontend)
    - Procedural Generation:
-     - Stack/Queue: Textured asphalt, corrugated metal, scattered props.
-     - Linked List: Volumetric lighting, animated belts.
-     - Trees: High-detail warehouse floor with shelves and conveyors.
-     - Sorting: Gantry Crane and glowing containers.
-     - Arrays: Multi-level Pallet Racking system.
-   - Animation Strategy:
-     - `DroneSprite`: Visualizes tree traversals.
-     - `GantryCraneSprite`: Visualizes sorting swaps.
-     - `MagneticCraneSprite`: Visualizes recursive moves.
-     - `ForkliftSprite`: Visualizes Array Writes. Features a complex state machine 
-       (Move -> Lift -> MoveIn -> Drop -> MoveOut -> Lower -> Return) to ensure 
-       precise cargo placement on shelves.
-   - Smart Layouts:
-     - Trees use "Smooth Zoom" to fit nodes.
-     - Arrays use a "Multi-Aisle" system, automatically stacking shelves vertically
-       when the array size increases (10, 20, or 30 slots).
+     - All assets (buildings, trucks, terrain) are drawn via code (pygame.draw).
+     - "Industrial Night Shift" Aesthetic: Dark concrete, hazard yellow markings, 
+       and dynamic lighting.
+   - Facility Overview (`main.py`):
+     - `Facility` Class: Handles 2.5D building projection, procedural details (vents, pipes),
+       and specific mechanical animations (fans, elevators, cranes).
+     - Lighting System: Uses gradient alpha blending to create soft spotlights and 
+       glow effects on hover.
+     - Terrain: Tiled concrete generation with expansion joints, cracks, and oil stains.
+   - Simulation Views:
+     - Specific sprites (`ForkliftSprite`, `DroneSprite`, `GantryCrane`) handle 
+       complex interpolation and state transitions (e.g., Move -> Lift -> Drop).
 
-4. UI & INTERACTION (The Handheld)
-   - Style: Rugged Industrial Scanner (Zebra/Honeywell aesthetic).
+4. UI & INTERACTION
+   - Style: Rugged Industrial Scanner (WMS Handheld).
    - Components: 
      - `HandheldChassis`: Draws the device body.
-     - `LCDDisplay`: Features scrolling text and handles user input.
-     - `RoundButton` & `Button`: Tactile UI elements.
-   - Popups & Overlays:
-     - Analysis, Algorithm Selection, and Manifests are handled via modal overlays.
-     - Manifests support scrolling for large datasets.
+     - `LCDDisplay`: Handles text input and status messages.
+     - `IndustrialLabel`: High-contrast floating labels in the Overworld.
+   - Transitions:
+     - "System Uplink": A fade-to-black terminal effect when switching modules 
+       to simulate remote connection.
 </file>
 
 <file path="Full_Stack_Sim/assets/__init__.py/__init__.py">
@@ -456,138 +449,320 @@ from simulation.site_expression_tree import ExpressionTreeSimulation
 from simulation.site_sorting_floor import SortingSimulation
 from simulation.site_recursion_lab import RecursionSimulation
 from simulation.site_warehouse_array import ArraySimulation
-class MapPin:
-    def __init__(self, x, y, label, sub_label, icon_char, callback):
+COLOR_CONCRETE_DARK = (30, 32, 35)
+COLOR_CONCRETE_LIGHT = (50, 52, 55)
+COLOR_ASPHALT = (20, 20, 22)
+COLOR_MARKING = (200, 180, 50)
+COLOR_WALL_DARK = (40, 45, 50)
+COLOR_WALL_LIGHT = (60, 65, 70)
+COLOR_ROOF_BASE = (30, 35, 40)
+class IndustrialLabel:
+    def __init__(self, x, y, title, subtitle):
         self.x = x
         self.y = y
-        self.label = label
-        self.sub_label = sub_label
-        self.icon_char = icon_char
+        self.title = title.upper()
+        self.subtitle = subtitle.upper()
+        self.font_head = pygame.font.SysFont("Impact", 16)
+        self.font_sub = pygame.font.SysFont("Arial", 10, bold=True)
+        self.alpha = 0
+    def draw(self, screen, hovered):
+        target = 255 if hovered else 150
+        self.alpha += (target - self.alpha) * 0.1
+        t_surf = self.font_head.render(self.title, True, (255, 255, 255))
+        s_surf = self.font_sub.render(self.subtitle, True, (255, 200, 0))
+        w = max(t_surf.get_width(), s_surf.get_width()) + 20
+        h = 40
+        bg_rect = pygame.Rect(self.x - w//2, self.y - h - 10, w, h)
+        s_rect = bg_rect.copy()
+        s_rect.y += 4
+        s_surf_bg = pygame.Surface((w, h), pygame.SRCALPHA)
+        pygame.draw.rect(s_surf_bg, (0, 0, 0, 100), s_surf_bg.get_rect(), border_radius=4)
+        screen.blit(s_surf_bg, s_rect)
+        plate_surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        plate_alpha = int(self.alpha)
+        pygame.draw.rect(plate_surf, (20, 25, 30, plate_alpha), (0, 0, w, h), border_radius=4)
+        pygame.draw.rect(plate_surf, (100, 100, 100, plate_alpha), (0, 0, w, h), 1, border_radius=4)
+        pygame.draw.rect(plate_surf, (255, 200, 0, plate_alpha), (0, 0, 4, h), border_top_left_radius=4, border_bottom_left_radius=4)
+        plate_surf.blit(t_surf, (10, 4))
+        plate_surf.blit(s_surf, (10, 22))
+        screen.blit(plate_surf, bg_rect)
+        if hovered:
+            start = (self.x, self.y)
+            end = (self.x, bg_rect.bottom)
+            pygame.draw.line(screen, (255, 255, 255), start, end, 1)
+            pygame.draw.circle(screen, (255, 255, 255), start, 2)
+class Facility:
+    def __init__(self, x, y, w, h, title, subtitle, type_id, callback):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.base_y = y
+        self.title = title
+        self.subtitle = subtitle
+        self.type_id = type_id
         self.callback = callback
-        self.radius = 25
         self.hovered = False
-        self.pulse_timer = random.randint(0, 60)
-        self.font_icon = pygame.font.SysFont("Impact", 24)
-        self.font_label = pygame.font.SysFont("Arial", 14, bold=True)
-        self.font_sub = pygame.font.SysFont("Arial", 12)
+        self.anim_timer = 0
+        self.label = IndustrialLabel(self.rect.centerx, self.rect.top - 5, title, subtitle)
+        self.wall_color = COLOR_WALL_DARK
+        self.roof_color = COLOR_ROOF_BASE
+        self.accent_color = (255, 100, 0)
+        if type_id in ["STACK", "QUEUE"]: self.accent_color = (255, 200, 0)
+        if type_id in ["CONVEYOR", "SORTING"]: self.accent_color = (0, 150, 255)
+        if type_id in ["TREE", "EXPR_TREE"]: self.accent_color = (0, 255, 100)
+        if type_id in ["RECURSION", "ARRAY"]: self.accent_color = (255, 50, 50)
     def update(self):
-        self.pulse_timer += 1
         mouse_pos = pygame.mouse.get_pos()
-        dist = math.hypot(mouse_pos[0] - self.x, mouse_pos[1] - self.y)
-        self.hovered = dist < self.radius
+        self.hovered = self.rect.collidepoint(mouse_pos)
+        if self.hovered:
+            self.anim_timer += 1
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.hovered:
                 self.callback()
     def draw(self, screen):
-        pulse_scale = (math.sin(self.pulse_timer * 0.1) + 1) * 0.5
-        pulse_r = self.radius + (pulse_scale * 10)
-        pulse_alpha = int(100 - (pulse_scale * 100))
-        pulse_surf = pygame.Surface((pulse_r*2, pulse_r*2), pygame.SRCALPHA)
-        pygame.draw.circle(pulse_surf, (0, 255, 255, pulse_alpha), (pulse_r, pulse_r), pulse_r)
-        screen.blit(pulse_surf, (self.x - pulse_r, self.y - pulse_r))
-        color = (255, 255, 255) if self.hovered else (0, 200, 200)
-        pygame.draw.circle(screen, (20, 30, 40), (self.x, self.y + 5), self.radius)
-        pygame.draw.circle(screen, (20, 40, 50), (self.x, self.y), self.radius)
-        pygame.draw.circle(screen, color, (self.x, self.y), self.radius, 3)
-        icon_surf = self.font_icon.render(self.icon_char, True, color)
-        screen.blit(icon_surf, (self.x - icon_surf.get_width()//2, self.y - icon_surf.get_height()//2))
+        shadow_offset = 15
+        shadow_points = [
+            self.rect.bottomleft,
+            (self.rect.left + shadow_offset, self.rect.bottom - shadow_offset),
+            (self.rect.right + shadow_offset, self.rect.bottom - shadow_offset),
+            (self.rect.right + shadow_offset, self.rect.top - shadow_offset),
+            self.rect.topright
+        ]
+        shadow_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        pygame.draw.polygon(shadow_surf, (0, 0, 0, 120), shadow_points)
+        screen.blit(shadow_surf, (0,0))
+        pad_rect = self.rect.inflate(20, 20)
+        pygame.draw.rect(screen, COLOR_CONCRETE_LIGHT, pad_rect, border_radius=4)
+        pygame.draw.rect(screen, (20, 20, 20), pad_rect, 1, border_radius=4)
+        depth = 10
+        pygame.draw.polygon(screen, (30, 30, 35), [
+            self.rect.topright,
+            (self.rect.right + depth, self.rect.top - depth),
+            (self.rect.right + depth, self.rect.bottom - depth),
+            self.rect.bottomright
+        ])
+        pygame.draw.polygon(screen, (50, 50, 55), [
+            self.rect.topleft,
+            (self.rect.left + depth, self.rect.top - depth),
+            (self.rect.right + depth, self.rect.top - depth),
+            self.rect.topright
+        ])
+        roof_rect = pygame.Rect(self.rect.left + depth, self.rect.top - depth, self.rect.width, self.rect.height)
+        pygame.draw.rect(screen, self.roof_color, roof_rect)
+        for i in range(roof_rect.left, roof_rect.right, 10):
+            pygame.draw.line(screen, (0, 0, 0, 50), (i, roof_rect.top), (i, roof_rect.bottom), 1)
+        self._draw_mechanics(screen, roof_rect)
         if self.hovered:
-            bubble_w = 180
-            bubble_h = 50
-            bx = self.x + 35
-            by = self.y - 40
-            pygame.draw.line(screen, (255, 255, 255), (self.x + 15, self.y - 15), (bx, by + 25), 2)
-            bubble_rect = pygame.Rect(bx, by, bubble_w, bubble_h)
-            pygame.draw.rect(screen, (245, 245, 250), bubble_rect, border_radius=8)
-            pygame.draw.rect(screen, (0, 200, 200), bubble_rect, 2, border_radius=8)
-            lbl = self.font_label.render(self.label, True, (20, 20, 20))
-            sub = self.font_sub.render(self.sub_label, True, (100, 100, 100))
-            screen.blit(lbl, (bx + 10, by + 8))
-            screen.blit(sub, (bx + 10, by + 28))
+            glow_radius = 150
+            glow_surf = pygame.Surface((glow_radius * 2, glow_radius * 2), pygame.SRCALPHA)
+            num_layers = 15
+            for i in range(num_layers):
+                radius = int(glow_radius * (1 - i/num_layers))
+                alpha = int(10 + (i * 2))
+                if alpha > 60: alpha = 60
+                pygame.draw.circle(glow_surf, (*self.accent_color, alpha), (glow_radius, glow_radius), radius)
+            screen.blit(glow_surf, (roof_rect.centerx - glow_radius, roof_rect.centery - glow_radius))
+            pygame.draw.rect(screen, self.accent_color, roof_rect, 2)
+            pygame.draw.rect(screen, (255, 255, 255), roof_rect, 1)
+        self.label.draw(screen, self.hovered)
+    def _draw_mechanics(self, screen, rect):
+        cx, cy = rect.center
+        if self.type_id == "STACK":
+            shaft_w = 30
+            pygame.draw.rect(screen, (20, 20, 20), (cx - shaft_w//2, rect.top + 10, shaft_w, rect.height - 20))
+            offset = abs(math.sin(self.anim_timer * 0.05)) * (rect.height - 40)
+            plat_y = rect.bottom - 20 - offset
+            plat_color = self.accent_color if self.hovered else (40, 40, 40)
+            pygame.draw.rect(screen, plat_color, (cx - 12, plat_y, 24, 8))
+        elif self.type_id == "QUEUE":
+            for y in [rect.top + 20, rect.bottom - 20]:
+                pygame.draw.line(screen, (50, 50, 50), (rect.left, y), (rect.right, y), 6)
+                if self.hovered:
+                    offset = (self.anim_timer * 2) % 20
+                    for x in range(rect.left, rect.right, 20):
+                        lx = x + offset
+                        if lx < rect.right:
+                            pygame.draw.circle(screen, self.accent_color, (lx, y), 2)
+        elif self.type_id == "CONVEYOR":
+            for gx in [cx - 30, cx, cx + 30]:
+                pygame.draw.circle(screen, (60, 60, 60), (gx, cy), 12)
+                if self.hovered:
+                    angle = self.anim_timer * 0.1
+                    end_x = gx + math.cos(angle) * 12
+                    end_y = cy + math.sin(angle) * 12
+                    pygame.draw.line(screen, (100, 100, 100), (gx, cy), (end_x, end_y), 2)
+        elif self.type_id == "TREE":
+            pygame.draw.line(screen, (50, 50, 50), (cx, rect.top), (cx, rect.bottom), 4)
+            pygame.draw.line(screen, (50, 50, 50), (rect.left, cy), (rect.right, cy), 4)
+            if self.hovered:
+                offset = (self.anim_timer * 2) % (rect.height // 2)
+                pygame.draw.circle(screen, self.accent_color, (cx, cy - offset), 3)
+                pygame.draw.circle(screen, self.accent_color, (cx, cy + offset), 3)
+        elif self.type_id == "EXPR_TREE":
+            pygame.draw.rect(screen, (40, 40, 40), (cx - 20, cy - 20, 40, 40))
+            pygame.draw.rect(screen, (20, 20, 20), (cx - 20, cy - 20, 40, 40), 2)
+            if self.hovered:
+                if (self.anim_timer // 10) % 2 == 0:
+                    pygame.draw.rect(screen, self.accent_color, (cx - 15, cy - 15, 10, 10))
+                    pygame.draw.rect(screen, self.accent_color, (cx + 5, cy + 5, 10, 10))
+                else:
+                    pygame.draw.rect(screen, self.accent_color, (cx + 5, cy - 15, 10, 10))
+                    pygame.draw.rect(screen, self.accent_color, (cx - 15, cy + 5, 10, 10))
+        elif self.type_id == "SORTING":
+            pygame.draw.line(screen, (80, 80, 80), (rect.left, rect.top + 10), (rect.right, rect.top + 10), 2)
+            pygame.draw.line(screen, (80, 80, 80), (rect.left, rect.bottom - 10), (rect.right, rect.bottom - 10), 2)
+            crane_x = rect.left + 10 + abs(math.sin(self.anim_timer * 0.05)) * (rect.width - 40)
+            crane_color = self.accent_color if self.hovered else (40, 40, 40)
+            pygame.draw.rect(screen, crane_color, (crane_x, rect.top + 5, 10, rect.height - 10))
+        elif self.type_id == "ARRAY":
+            rows, cols = 3, 6
+            cell_w = rect.width / cols
+            cell_h = rect.height / rows
+            for r in range(rows):
+                for c in range(cols):
+                    bx = rect.left + c * cell_w + 2
+                    by = rect.top + r * cell_h + 2
+                    pygame.draw.rect(screen, (40, 40, 45), (bx, by, cell_w - 4, cell_h - 4))
+                    if (r * c + r) % 3 == 0:
+                         pygame.draw.rect(screen, (60, 70, 80), (bx+2, by+2, cell_w - 8, cell_h - 8))
+            if self.hovered:
+                scan_x = rect.left + abs(math.sin(self.anim_timer * 0.05)) * rect.width
+                pygame.draw.line(screen, (255, 0, 0), (scan_x, rect.top), (scan_x, rect.bottom), 2)
+        elif self.type_id == "RECURSION":
+            pygame.draw.circle(screen, (40, 40, 40), (cx, cy), 25, 2)
+            pygame.draw.circle(screen, (40, 40, 40), (cx, cy), 15, 2)
+            if self.hovered:
+                angle = self.anim_timer * 0.1
+                ox = cx + math.cos(angle) * 25
+                oy = cy + math.sin(angle) * 25
+                pygame.draw.line(screen, self.accent_color, (cx, cy), (ox, oy), 2)
 class MainMenu:
     def __init__(self, screen, switch_callback):
         self.screen = screen
         self.switch_callback = switch_callback
-        self.map_surface = self._generate_map_background()
-        self.pins = [
-            MapPin(150, 150, "MAINTENANCE BAY", "SITE A: STACK (LIFO)", "A", lambda: self.switch_callback("STACK")),
-            MapPin(400, 120, "WEIGH STATION", "SITE B: QUEUE (FIFO)", "B", lambda: self.switch_callback("QUEUE")),
-            MapPin(700, 150, "CONVEYOR BELT", "SITE C: LINKED LIST", "C", lambda: self.switch_callback("CONVEYOR")),
-            MapPin(150, 350, "ROUTING FLOOR", "SITE D: BST", "D", lambda: self.switch_callback("TREE")),
-            MapPin(400, 350, "PARSER LAB", "SITE E: EXPR TREE", "E", lambda: self.switch_callback("EXPR_TREE")),
-            MapPin(700, 350, "SORTING FLOOR", "SITE F: ALGORITHMS", "F", lambda: self.switch_callback("SORTING")),
-            MapPin(250, 550, "AUTOMATION LAB", "SITE G: RECURSION", "G", lambda: self.switch_callback("RECURSION")),
-            MapPin(600, 550, "SMART RACK", "SITE H: ARRAYS", "H", lambda: self.switch_callback("ARRAY")),
+        self.bg_surface = self._generate_map_background()
+        self.transitioning = False
+        self.transition_alpha = 0
+        self.target_scene = None
+        self.facilities = [
+            Facility(80, 130, 80, 140, "Stack Tower", "LIFO Operations", "STACK", lambda: self.start_transition("STACK")),
+            Facility(250, 150, 180, 80, "Weigh Station", "FIFO Queue", "QUEUE", lambda: self.start_transition("QUEUE")),
+            Facility(520, 130, 150, 100, "Conveyor Belt", "Linked List", "CONVEYOR", lambda: self.start_transition("CONVEYOR")),
+            Facility(120, 350, 120, 120, "Routing Hub", "Binary Search Tree", "TREE", lambda: self.start_transition("TREE")),
+            Facility(450, 350, 120, 120, "Parser Lab", "Expression Tree", "EXPR_TREE", lambda: self.start_transition("EXPR_TREE")),
+            Facility(80, 550, 200, 100, "Sorting Yard", "Algorithms", "SORTING", lambda: self.start_transition("SORTING")),
+            Facility(350, 570, 100, 80, "Recursion", "Hanoi Crane", "RECURSION", lambda: self.start_transition("RECURSION")),
+            Facility(550, 550, 200, 80, "Smart Rack", "Array Storage", "ARRAY", lambda: self.start_transition("ARRAY")),
         ]
         self.exit_btn = Button(SCREEN_WIDTH - 120, SCREEN_HEIGHT - 50, 100, 30, "LOGOUT", lambda: self.switch_callback("QUIT"))
     def _generate_map_background(self):
         surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        surf.fill((30, 35, 40))
-        pygame.draw.polygon(surf, (20, 40, 50), [(850, 0), (1000, 0), (1000, 300), (800, 150)])
-        road_color = (50, 55, 60)
-        road_width = 40
-        pygame.draw.rect(surf, road_color, (0, 230, SCREEN_WIDTH, road_width))
-        pygame.draw.rect(surf, road_color, (0, 450, SCREEN_WIDTH, road_width))
-        pygame.draw.rect(surf, road_color, (130, 0, road_width, SCREEN_HEIGHT))
-        pygame.draw.rect(surf, road_color, (380, 0, road_width, SCREEN_HEIGHT))
-        pygame.draw.rect(surf, road_color, (680, 0, road_width, SCREEN_HEIGHT))
-        for x in [150, 400, 700]:
-            for y in [250, 470]:
-                pygame.draw.circle(surf, road_color, (x, y), 35)
-                pygame.draw.circle(surf, (60, 65, 70), (x, y), 15)
-        pygame.draw.rect(surf, (40, 45, 50), (80, 80, 140, 140))
-        for i in range(90, 210, 15): pygame.draw.line(surf, (60, 65, 70), (90, i), (120, i), 1)
-        pygame.draw.rect(surf, (40, 45, 50), (330, 80, 140, 100), border_radius=20)
-        pygame.draw.rect(surf, (30, 35, 40), (350, 100, 100, 60), border_radius=20)
-        pygame.draw.rect(surf, (45, 50, 55), (630, 100, 140, 80))
-        pygame.draw.line(surf, (70, 75, 80), (630, 140), (770, 140), 2)
-        pygame.draw.rect(surf, (50, 55, 60), (100, 300, 100, 100))
-        pygame.draw.rect(surf, (30, 35, 40), (120, 320, 60, 60))
-        pygame.draw.polygon(surf, (55, 60, 65), [(400, 290), (460, 320), (460, 380), (400, 410), (340, 380), (340, 320)])
-        pygame.draw.rect(surf, (45, 50, 55), (630, 290, 140, 120))
-        for x in range(640, 770, 10): pygame.draw.line(surf, (35, 40, 45), (x, 290), (x, 410), 1)
-        pygame.draw.rect(surf, (40, 45, 50), (180, 500, 140, 100))
-        pygame.draw.circle(surf, (60, 65, 70), (250, 550), 40, 2)
-        pygame.draw.rect(surf, (45, 50, 55), (530, 500, 140, 100))
-        for y in range(510, 590, 10): pygame.draw.line(surf, (70, 75, 80), (540, y), (660, y), 2)
-        for _ in range(100):
-            tx = random.randint(0, SCREEN_WIDTH)
-            ty = random.randint(0, SCREEN_HEIGHT)
-            if surf.get_at((tx, ty)) == (30, 35, 40):
-                pygame.draw.circle(surf, (35, 50, 40), (tx, ty), random.randint(3, 6))
-        for x in range(0, SCREEN_WIDTH, 50):
-            pygame.draw.line(surf, (255, 255, 255, 10), (x, 0), (x, SCREEN_HEIGHT), 1)
-        for y in range(0, SCREEN_HEIGHT, 50):
-            pygame.draw.line(surf, (255, 255, 255, 10), (0, y), (SCREEN_WIDTH, y), 1)
+        surf.fill(COLOR_CONCRETE_DARK)
+        tile_w, tile_h = 100, 80
+        for y in range(0, SCREEN_HEIGHT, tile_h):
+            for x in range(0, SCREEN_WIDTH, tile_w):
+                base_val = random.randint(28, 35)
+                color = (base_val, base_val + 2, base_val + 5)
+                pygame.draw.rect(surf, color, (x, y, tile_w, tile_h))
+                pygame.draw.line(surf, (20, 22, 25), (x, y), (x + tile_w, y), 2)
+                pygame.draw.line(surf, (20, 22, 25), (x, y), (x, y + tile_h), 2)
+                if random.random() > 0.8:
+                    cx, cy = x + random.randint(20, 80), y + random.randint(20, 60)
+                    points = [(cx, cy)]
+                    for _ in range(3):
+                        cx += random.randint(-10, 10)
+                        cy += random.randint(-10, 10)
+                        points.append((cx, cy))
+                    pygame.draw.lines(surf, (25, 25, 25), False, points, 1)
+        for _ in range(20):
+            sx = random.randint(0, SCREEN_WIDTH)
+            sy = random.randint(0, SCREEN_HEIGHT)
+            w = random.randint(30, 80)
+            h = random.randint(20, 50)
+            stain = pygame.Surface((w, h), pygame.SRCALPHA)
+            pygame.draw.ellipse(stain, (10, 10, 10, 30), (0, 0, w, h))
+            surf.blit(stain, (sx, sy))
+        road_color = COLOR_ASPHALT
+        points = [(120, 270), (600, 270), (600, 530), (120, 530)]
+        pygame.draw.lines(surf, road_color, True, points, 60)
+        connectors = [
+            ((120, 270), (120, 200)),
+            ((340, 270), (340, 200)),
+            ((600, 270), (600, 200)),
+            ((180, 270), (180, 350)),
+            ((510, 270), (510, 350)),
+            ((180, 530), (180, 600)),
+            ((400, 530), (400, 600)),
+            ((600, 530), (600, 600)),
+        ]
+        for p1, p2 in connectors:
+            pygame.draw.line(surf, road_color, p1, p2, 40)
+        for p1, p2 in connectors:
+            pygame.draw.line(surf, COLOR_MARKING, p1, p2, 2)
+        for _ in range(20000):
+            x = random.randint(0, SCREEN_WIDTH-1)
+            y = random.randint(0, SCREEN_HEIGHT-1)
+            c = random.randint(0, 10)
+            current = surf.get_at((x,y))
+            new_c = (max(0, current.r - c), max(0, current.g - c), max(0, current.b - c))
+            surf.set_at((x, y), new_c)
+        vig = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        pygame.draw.rect(vig, (0,0,0,0), vig.get_rect())
+        for i in range(100):
+            pygame.draw.rect(vig, (0,0,0, 2), (i*4, i*3, SCREEN_WIDTH - i*8, SCREEN_HEIGHT - i*6), 10)
+        surf.blit(vig, (0,0))
         return surf
+    def start_transition(self, scene_name):
+        if not self.transitioning:
+            self.transitioning = True
+            self.target_scene = scene_name
+            self.transition_alpha = 0
     def handle_events(self, event):
-        for pin in self.pins:
-            pin.handle_event(event)
+        if self.transitioning:
+            return
+        for fac in self.facilities:
+            fac.handle_event(event)
         self.exit_btn.handle_event(event)
     def update(self):
-        for pin in self.pins:
-            pin.update()
+        for fac in self.facilities:
+            fac.update()
+        if self.transitioning:
+            self.transition_alpha += 10
+            if self.transition_alpha >= 255:
+                self.transition_alpha = 255
+                self.switch_callback(self.target_scene)
     def draw(self):
-        self.screen.blit(self.map_surface, (0, 0))
-        for pin in self.pins:
-            pin.draw(self.screen)
+        self.screen.blit(self.bg_surface, (0, 0))
+        for fac in self.facilities:
+            fac.draw(self.screen)
         self.exit_btn.draw(self.screen)
-        pygame.draw.rect(self.screen, (0, 0, 0, 200), (0, 0, SCREEN_WIDTH, 40))
-        pygame.draw.line(self.screen, (0, 255, 255), (0, 40), (SCREEN_WIDTH, 40), 1)
-        font = pygame.font.SysFont("Consolas", 18)
-        title = font.render("FULL STACK LOGISTICS // COMMAND CENTER", True, (0, 255, 255))
-        self.screen.blit(title, (20, 10))
-        status = font.render("SYSTEM: ONLINE", True, (0, 255, 0))
-        self.screen.blit(status, (SCREEN_WIDTH - 180, 10))
-        for y in range(0, SCREEN_HEIGHT, 4):
-            pygame.draw.line(self.screen, (0, 0, 0, 50), (0, y), (SCREEN_WIDTH, y), 1)
+        pygame.draw.rect(self.screen, (0, 0, 0), (0, 0, SCREEN_WIDTH, 40))
+        pygame.draw.line(self.screen, (255, 200, 0), (0, 40), (SCREEN_WIDTH, 40), 2)
+        font = pygame.font.SysFont("Impact", 20)
+        title = font.render("FULL STACK LOGISTICS // FACILITY OVERVIEW", True, (200, 200, 200))
+        self.screen.blit(title, (20, 8))
+        pygame.draw.circle(self.screen, (0, 255, 0), (SCREEN_WIDTH - 30, 20), 5)
+        status = pygame.font.SysFont("Arial", 10).render("LIVE FEED", True, (0, 255, 0))
+        self.screen.blit(status, (SCREEN_WIDTH - 90, 15))
+        hint = pygame.font.SysFont("Arial", 10).render("[F11] FULL SCREEN", True, (100, 100, 100))
+        self.screen.blit(hint, (SCREEN_WIDTH - 180, 15))
+        if self.transitioning:
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            overlay.fill((0, 0, 0))
+            overlay.set_alpha(self.transition_alpha)
+            self.screen.blit(overlay, (0, 0))
+            if self.transition_alpha > 100:
+                font_term = pygame.font.SysFont("Consolas", 24, bold=True)
+                text = font_term.render(f"ESTABLISHING UPLINK TO {self.target_scene}...", True, (0, 255, 0))
+                self.screen.blit(text, (SCREEN_WIDTH//2 - text.get_width()//2, SCREEN_HEIGHT//2))
 def main():
     pygame.init()
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    # Default to windowed, but use SCALED to allow resizing if the OS supports it
+    flags = pygame.SCALED
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), flags)
     pygame.display.set_caption("Full Stack Logistics Simulator")
     clock = pygame.time.Clock()
     current_scene = None
+    is_fullscreen = False
     def switch_scene(scene_name):
         nonlocal current_scene
         if scene_name == "MENU":
@@ -629,6 +804,15 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_F11:
+                    is_fullscreen = not is_fullscreen
+                    if is_fullscreen:
+                        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SCALED | pygame.FULLSCREEN)
+                    else:
+                        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SCALED)
+                    if current_scene:
+                        current_scene.screen = screen
             if current_scene:
                 current_scene.handle_events(event)
         if current_scene:
@@ -1190,8 +1374,8 @@ class ExpressionTreeSimulation:
         gen_y = 280; btn_radius = 40; h_gap = 15
         self.btn_gen_levels = RoundButton(btn_cx - btn_radius - h_gap, gen_y, btn_radius, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "LEVELS", self.action_gen_levels)
         self.btn_gen_expr = RoundButton(btn_cx + btn_radius + h_gap, gen_y, btn_radius, BTN_ALT_GREEN_BASE, BTN_ALT_GREEN_LIGHT, "EXPR", self.action_gen_expr)
-        self.btn_analyze = RoundButton(btn_cx, 420, 40, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "ANALYZE", self.action_open_analysis_menu)
-        self.btn_clear = RoundButton(btn_cx, 520, 40, BTN_RED_BASE, BTN_RED_LIGHT, "CLEAR", self.action_clear)
+        self.btn_analyze = RoundButton(btn_cx, 390, 40, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "TRAVERSE", self.action_open_analysis_menu)
+        self.btn_clear = RoundButton(btn_cx, 490, 40, BTN_RED_BASE, BTN_RED_LIGHT, "CLEAR", self.action_clear)
         self.SIM_WIDTH = 750; self.TOP_MARGIN = 120; self.BOTTOM_MARGIN = 50
         self.ROOT_X = self.SIM_WIDTH // 2; self.current_node_size = 80; self.belt_offset = 0
         self.show_analysis_menu = False; self.manifest_data = None; self.pending_report_data = None
@@ -1511,7 +1695,7 @@ class ParkingQueueSimulation:
         btn_cx = self.ui_x + self.ui_w // 2
         self.btn_arrive = RoundButton(btn_cx, 280, 45, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "ENQUEUE", self.action_arrive)
         self.btn_depart = RoundButton(btn_cx, 390, 45, BTN_RED_BASE, BTN_RED_LIGHT, "DEQUEUE", self.action_depart)
-        self.btn_summary = RoundButton(btn_cx, 500, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "MANIFEST", self.action_summary)
+        self.btn_summary = RoundButton(btn_cx, 500, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "SUMMARY", self.action_summary)
         self.btn_skip = RoundButton(btn_cx, 590, 30, (100, 100, 100), (150, 150, 150), "SKIP", self.action_skip)
         self.visual_queue = []
         self.is_animating = False
@@ -1910,7 +2094,7 @@ class ParkingStackSimulation:
         btn_cx = self.ui_x + self.ui_w // 2
         self.btn_arrive = RoundButton(btn_cx, 280, 45, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "ARRIVE", self.action_arrive)
         self.btn_depart = RoundButton(btn_cx, 390, 45, BTN_RED_BASE, BTN_RED_LIGHT, "DEPART", self.action_depart)
-        self.btn_summary = RoundButton(btn_cx, 500, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "MANIFEST", self.action_summary)
+        self.btn_summary = RoundButton(btn_cx, 500, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "SUMMARY", self.action_summary)
         self.btn_skip = RoundButton(btn_cx, 590, 30, (100, 100, 100), (150, 150, 150), "SKIP", self.action_skip)
         self.visual_stack = []; self.holding_stack_height = 0
         self.last_receipt = None; self.event_queue = []
@@ -2773,8 +2957,8 @@ class RouterTreeSimulation:
         self.lcd.update_status("ROUTING SYSTEM")
         btn_cx = self.ui_x + self.ui_w // 2
         self.btn_insert = RoundButton(btn_cx, 280, 45, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "INJECT", self.action_insert)
-        self.btn_reset = RoundButton(btn_cx, 390, 45, BTN_RED_BASE, BTN_RED_LIGHT, "FLUSH", self.action_reset)
-        self.btn_scan = RoundButton(btn_cx, 490, 40, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "SCAN", self.action_open_traversal_menu)
+        self.btn_reset = RoundButton(btn_cx, 390, 45, BTN_RED_BASE, BTN_RED_LIGHT, "CLEAR", self.action_reset)
+        self.btn_scan = RoundButton(btn_cx, 500, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "TRAVERSE", self.action_open_traversal_menu)
         self.is_animating = False
         self.SIM_WIDTH = 750; self.TOP_MARGIN = 120; self.BOTTOM_MARGIN = 50
         self.ROOT_X = self.SIM_WIDTH // 2
@@ -3662,10 +3846,10 @@ class ArraySimulation:
         self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
         self.lcd.update_status("SELECT A SLOT")
         btn_cx = self.ui_x + self.ui_w // 2
-        self.btn_write = RoundButton(btn_cx, 280, 45, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "WRITE", self.action_write)
-        self.btn_manifest = RoundButton(btn_cx, 390, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "MANIFEST", self.action_manifest)
-        self.btn_clear = RoundButton(btn_cx, 500, 45, BTN_RED_BASE, BTN_RED_LIGHT, "CLEAR", self.action_clear)
-        self.btn_resize = RoundButton(btn_cx, 610, 40, (200, 180, 50), (255, 230, 80), "RESIZE", self.action_resize_click)
+        self.btn_write = RoundButton(btn_cx, 260, 45, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "WRITE", self.action_write)
+        self.btn_manifest = RoundButton(btn_cx, 480, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "SUMMARY", self.action_manifest)
+        self.btn_clear = RoundButton(btn_cx, 590, 45, BTN_RED_BASE, BTN_RED_LIGHT, "CLEAR", self.action_clear)
+        self.btn_resize = RoundButton(btn_cx, 370, 45, (200, 180, 50), (255, 230, 80), "RESIZE", self.action_resize_click)
         self.selected_index = None
         self.is_animating = False
         self.show_manifest = False
@@ -4211,80 +4395,79 @@ class ArraySimulation:
 
 <file path="README.txt/README.txt">
 PROJECT: Full Stack Logistics Simulator
+VERSION: 1.0 (Gold Master)
 THEME: Industrial Visualization of Data Structures (Warehouse Management System)
-ENGINE: Python 3.x / Pygame
+ENGINE: Python 3.x / Pygame Community Edition
 
 DESCRIPTION:
-A visualization tool that represents computer science data structures as 
-realistic logistics operations. The project uses a "Sim-Style" aesthetic,
-rendering high-detail procedural assets (trucks, cargo, environment) entirely
-via code.
+A high-fidelity visualization tool that represents computer science data structures 
+as realistic logistics operations. The project uses a "Sim-Style" aesthetic, 
+rendering procedural assets (trucks, cargo, environment, buildings) entirely via code.
 
-The interface mimics a rugged industrial handheld scanner (WMS Unit), 
-providing an immersive way to interact with the algorithms.
+The experience begins at the "Facility Overview," a dynamic, procedurally generated 
+industrial park at night, featuring real-time lighting and mechanical animations. 
+Users "uplink" to specific facilities to interact with the underlying algorithms 
+via a rugged handheld scanner interface.
 
-CURRENT MODULES:
+CONTROLS:
+- Mouse: Interact with UI, Select Slots, Hover over Facilities.
+- Keyboard: Type values into the scanner.
+- F11: Toggle Full Screen Mode.
 
-1. LEVEL 1 - THE VERTICAL PARKING BAY (STACK)
-   - Logic: LIFO (Last In, First Out).
-   - Setting: A rugged maintenance hangar with textured asphalt floors.
+MODULES (FACILITIES):
 
-2. LEVEL 2 - THE WEIGH STATION (QUEUE)
-   - Logic: FIFO (First In, First Out).
-   - Setting: High-detail Industrial Yard with procedural props.
+1. STACK TOWER (LIFO Operations)
+   - Logic: Last-In, First-Out stack management.
+   - Visuals: Vertical parking bay with hydraulic lifts and holding zones.
 
-3. LEVEL 3 - THE CONVEYOR BELT (LINKED LIST)
+2. WEIGH STATION (FIFO Queue)
+   - Logic: First-In, First-Out queue with loopback cycling.
+   - Visuals: Industrial yard with animated conveyor lanes and traffic control.
+
+3. CONVEYOR BELT (Linked List)
    - Logic: Singly Linked List (Insert/Remove at Index).
-   - Setting: Factory floor with volumetric lighting ("god rays").
+   - Visuals: Factory floor with volumetric lighting and animated belts.
 
-4. LEVEL 4 - THE ROUTING FLOOR (BINARY SEARCH TREE)
-   - Logic: Binary Search Tree (Insertion, Traversals).
-   - Setting: A high-detail warehouse with animated conveyors and a system drone.
+4. ROUTING HUB (Binary Search Tree)
+   - Logic: BST Insertion and Traversal (In/Pre/Post-order).
+   - Visuals: Automated warehouse with drone-based package routing.
 
-5. LEVEL 5 - THE EXPRESSION PARSER (BINARY TREE)
-   - Logic: Infix to Postfix conversion (Shunting-yard) to build an expression tree.
-   - Setting: An automated analysis floor with animated conveyors.
+5. PARSER LAB (Expression Tree)
+   - Logic: Shunting-yard algorithm for parsing mathematical expressions.
+   - Visuals: High-tech analysis floor with processing grids.
 
-6. LEVEL 6 - THE SORTING FLOOR (SORTING ALGORITHMS)
+6. SORTING YARD (Algorithms)
    - Logic: Bubble, Selection, Insertion, Merge, and Quick Sort.
-   - Setting: A large-scale warehouse bay with an overhead Gantry Crane.
+   - Visuals: Large-scale gantry crane operations with container manipulation.
 
-7. LEVEL 7 - THE AUTOMATION LAB (RECURSION)
-   - Logic: Interactive Tower of Hanoi (Manual & Auto-Solve).
-   - Setting: A high-detail warehouse bay with a dynamic magnetic crane.
+7. RECURSION LAB (Tower of Hanoi)
+   - Logic: Recursive problem solving (Manual & Auto-Solve).
+   - Visuals: Magnetic crane moving disks between platforms.
 
-8. LEVEL 8 - THE SMART RACK (ARRAY)
-   - Logic: Fixed-size Array with Random Access (O(1)).
-   - Setting: A multi-level pallet racking system with industrial lighting.
-   - Features:
-     - Visualizes the difference between Write (slow, mechanical Forklift) and 
-       Read (instant, laser scanner) operations.
-     - Dynamic resizing (10-30 slots) that automatically adjusts the rack 
-       layout into multiple aisles/levels.
-     - "Click-to-Select" interface for intuitive interaction.
-     - Scrollable inventory manifest.
+8. SMART RACK (Array Storage)
+   - Logic: Fixed-size Array (O(1) Read vs O(n) Write).
+   - Visuals: Multi-level pallet racking with industrial forklift physics.
 
 DIRECTORY STRUCTURE:
 Full_Stack_Sim/
-├── main.py                      # Entry Point (Main Menu & Scene Switcher)
+├── main.py                      # Entry Point (Facility Overview & State Machine)
 ├── settings.py                  # Config, Palettes, Physics Constants
 ├── core/                        # Shared Engine Code
-│   ├── sprites.py               # Procedural Asset Generators
-│   └── ui.py                    # Rugged UI System
-└── simulation/                  # Level Logic
-    ├── site_parking_stack.py    # Level 1: Stack
-    ├── site_parking_queue.py    # Level 2: Queue
-    ├── site_conveyor_list.py    # Level 3: Linked List
-    ├── site_router_tree.py      # Level 4: BST
-    ├── site_expression_tree.py  # Level 5: Binary Tree
-    ├── site_sorting_floor.py    # Level 6: Sorting
-    ├── site_recursion_lab.py    # Level 7: Recursion
-    └── site_warehouse_array.py  # Level 8: Array
+│   ├── sprites.py               # Procedural Asset Generators (Trucks, Crates)
+│   └── ui.py                    # Rugged UI System (Scanner, Buttons)
+└── simulation/                  # Level Logic & Visualization
+    ├── site_parking_stack.py    # Stack Logic
+    ├── site_parking_queue.py    # Queue Logic
+    ├── site_conveyor_list.py    # Linked List Logic
+    ├── site_router_tree.py      # BST Logic
+    ├── site_expression_tree.py  # Expression Tree Logic
+    ├── site_sorting_floor.py    # Sorting Logic
+    ├── site_recursion_lab.py    # Recursion Logic
+    └── site_warehouse_array.py  # Array Logic
 
 HOW TO RUN:
 1. Ensure Python 3.x and Pygame are installed (`pip install pygame`).
 2. Run: `python main.py`
-3. Select a Module from the Main Menu.
 </file>
 
 <file path="ROADMAP.txt/ROADMAP.txt">
@@ -4322,23 +4505,23 @@ PHASE 7: RECURSION (THE AUTOMATION LAB) - [COMPLETED]
 
 PHASE 8: ARRAYS (THE SMART RACK) - [COMPLETED]
 [x] Logic: Fixed-size array with O(1) Read and O(n) Write/Clear simulation.
-[x] Visuals: High-fidelity "Pallet Racking" environment with volumetric lighting.
+[x] Visuals: High-fidelity "Pallet Racking" environment.
 [x] Animation: Industrial Forklift with complex lift/place physics.
-[x] Feature: Dynamic Resizing (10-30 slots) with multi-level shelf generation.
-[x] Interaction: "Click-to-Select" workflow and Scrollable Manifest.
+[x] Feature: Dynamic Resizing (10-30 slots).
+
+PHASE 9: FACILITY OVERVIEW (MAIN MENU) - [COMPLETED]
+[x] Design: "Industrial Park" isometric map aesthetic.
+[x] Visuals: Procedural 2.5D buildings, animated mechanical parts, dynamic lighting.
+[x] Environment: Tiled concrete floor, asphalt roads, grime/oil textures.
+[x] Interaction: Hover effects with spotlights and "System Uplink" transitions.
+
+PHASE 10: FINAL POLISH - [COMPLETED]
+[x] Full Screen Support (F11) with aspect ratio scaling.
+[x] UI Refinement: High-contrast labels and consistent typography.
+[x] Bug Fixes: Animation states, lighting artifacts, and layout adjustments.
 
 ---
-PROJECT STATUS: PHASE 8 COMPLETE.
-
-NEXT STEPS
-
-PHASE 9: MAIN MENU OVERHAUL
-[ ] DESIGN: Replace the basic button list with a "Security Desk" or "Dashboard" aesthetic.
-[ ] VISUALS: Add CRT monitor effects, scanlines, and a map of the facility.
-
-PHASE 10: FINAL POLISH
-[ ] AUDIO: Add mechanical sound effects (optional).
-[ ] QA: Final bug sweep across all modules.
+PROJECT STATUS: COMPLETE (v1.0)
 </file>
 
 </files>
