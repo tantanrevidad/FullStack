@@ -4,43 +4,40 @@ ARCHITECTURE GUIDELINES
    - Core Engine (`core/`): Rendering engines (`sprites.py`) and UI system (`ui.py`).
    - Simulation Modules (`simulation/`): Self-contained "Site" files. Each site file
      encapsulates both the specific data structure logic and its corresponding
-     Pygame visualization class for improved modularity.
-   - Controller (`main.py`): State Machine to switch between Menu and simulation sites.
+     Pygame visualization class.
+   - Controller (`main.py`): A robust State Machine handling the "Facility Overview,"
+     scene transitions, and global display settings (Fullscreen/Scaling).
 
 2. LOGIC LAYER (The Backend)
-   - Class: `StackManager` (LIFO) -> Returns `TEMP_POP` / `RESTACK_PUSH` events.
-   - Class: `QueueManager` (FIFO) -> Returns `CYCLE` / `DEPART` events.
-   - Class: `LinkedListManager` -> Manages `Node` objects with `next` pointers.
-   - Class: `BSTManager` -> Manages recursive `BSTNode` structure.
-     - Tracks `current_depth` to inform the visualization layer of scaling needs.
-     - Contains `in_order`, `pre_order`, `post_order` methods that return a
-       list of `BSTNode` objects, providing a clean data path for animations.
-   - Responsibility: Pure data manipulation. No Pygame code allowed in these logic classes.
+   - Pure Python classes decoupled from Pygame.
+   - `StackManager` / `QueueManager`: Handle LIFO/FIFO operations and return event logs.
+   - `LinkedListManager`: Manages Node pointers.
+   - `BSTManager` / `ExpressionTreeManager`: Handle recursive tree structures.
+   - `SortingManager`: Generates step-by-step animation frames for algorithms.
+   - `RecursionManager`: Solves Hanoi states.
+   - `ArrayManager`: Manages fixed-size lists with explicit Read/Write receipts.
 
 3. VISUALIZATION LAYER (The Frontend)
    - Procedural Generation:
-     - Stack/Queue: Textured asphalt, corrugated metal, scattered props.
-     - Linked List: Volumetric lighting, animated belts.
-     - BST: High-detail warehouse floor with shelves, lighting, and animated
-       conveyor belts with mechanical diverter junctions.
-   - Smart Layout Engine (BST Specific):
-     - Uses a dynamic layout algorithm to calculate node target positions.
-     - Implements "Smooth Zoom" using Linear Interpolation (Lerp) for both node
-       positions and sizes, ensuring fluid animations as the tree grows.
-   - Animation Strategy:
-     - Uses Strict Sequential Processing and callback-driven event chains.
-     - Packages in the BST track and "attach" to Logical Node Objects, allowing
-       them to follow the tree even as it resizes/moves during animation.
-     - A `DroneSprite` visualizes traversals by sequentially moving to each node
-       in the path provided by the `BSTManager`.
+     - All assets (buildings, trucks, terrain) are drawn via code (pygame.draw).
+     - "Industrial Night Shift" Aesthetic: Dark concrete, hazard yellow markings, 
+       and dynamic lighting.
+   - Facility Overview (`main.py`):
+     - `Facility` Class: Handles 2.5D building projection, procedural details (vents, pipes),
+       and specific mechanical animations (fans, elevators, cranes).
+     - Lighting System: Uses gradient alpha blending to create soft spotlights and 
+       glow effects on hover.
+     - Terrain: Tiled concrete generation with expansion joints, cracks, and oil stains.
+   - Simulation Views:
+     - Specific sprites (`ForkliftSprite`, `DroneSprite`, `GantryCrane`) handle 
+       complex interpolation and state transitions (e.g., Move -> Lift -> Drop).
 
-4. UI & INTERACTION (The Handheld)
-   - Style: Rugged Industrial Scanner (Zebra/Honeywell aesthetic).
+4. UI & INTERACTION
+   - Style: Rugged Industrial Scanner (WMS Handheld).
    - Components: 
-     - `HandheldChassis`: Draws the device body with hazard stripes and bolts.
-     - `LCDDisplay`: Retro green-screen text input with scanlines.
-     - `RoundButton`: Tactile rubber buttons with 3D bevels.
-   - Popups & Overlays:
-     - Traversal selection is handled via a clean, modal overlay menu.
-     - Traversal results are displayed on a thematic "Scan Manifest" popup,
-       which appears only after the drone animation is complete.
+     - `HandheldChassis`: Draws the device body.
+     - `LCDDisplay`: Handles text input and status messages.
+     - `IndustrialLabel`: High-contrast floating labels in the Overworld.
+   - Transitions:
+     - "System Uplink": A fade-to-black terminal effect when switching modules 
+       to simulate remote connection.
