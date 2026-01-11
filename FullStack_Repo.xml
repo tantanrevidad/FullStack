@@ -70,12 +70,20 @@ Full_Stack_Sim/
       __init__.py
     site_conveyor_list.py/
       site_conveyor_list.py
+    site_expression_tree.py/
+      site_expression_tree.py
     site_parking_queue.py/
       site_parking_queue.py
     site_parking_stack.py/
       site_parking_stack.py
+    site_recursion_lab.py/
+      site_recursion_lab.py
     site_router_tree.py/
       site_router_tree.py
+    site_sorting_floor.py/
+      site_sorting_floor.py
+    site_warehouse_array.py/
+      site_warehouse_array.py
 FullStack Project Bible.ipynb/
   FullStack Project Bible.ipynb
 README.txt/
@@ -101,39 +109,43 @@ ARCHITECTURE GUIDELINES
    - Class: `StackManager` (LIFO) -> Returns `TEMP_POP` / `RESTACK_PUSH` events.
    - Class: `QueueManager` (FIFO) -> Returns `CYCLE` / `DEPART` events.
    - Class: `LinkedListManager` -> Manages `Node` objects with `next` pointers.
-   - Class: `BSTManager` -> Manages recursive `BSTNode` structure.
-     - Tracks `current_depth` to inform the visualization layer of scaling needs.
-     - Contains `in_order`, `pre_order`, `post_order` methods that return a
-       list of `BSTNode` objects, providing a clean data path for animations.
-   - Responsibility: Pure data manipulation. No Pygame code allowed in these logic classes.
+   - Class: `BSTManager` -> Manages recursive `BSTNode` structure for searching.
+   - Class: `ExpressionTreeManager` -> Shunting-yard algorithm & Tree building.
+   - Class: `SortingManager` -> Generates step-by-step plans for sorting algorithms.
+   - Class: `RecursionManager` -> Solves Tower of Hanoi states.
+   - Class: `ArrayManager` -> 
+     - Manages a fixed-size list with direct index access.
+     - Handles resizing logic and data persistence during resize.
+     - Returns explicit `WRITE`, `READ`, and `CLEAR` receipts.
 
 3. VISUALIZATION LAYER (The Frontend)
    - Procedural Generation:
      - Stack/Queue: Textured asphalt, corrugated metal, scattered props.
      - Linked List: Volumetric lighting, animated belts.
-     - BST: High-detail warehouse floor with shelves, lighting, and animated
-       conveyor belts with mechanical diverter junctions.
-   - Smart Layout Engine (BST Specific):
-     - Uses a dynamic layout algorithm to calculate node target positions.
-     - Implements "Smooth Zoom" using Linear Interpolation (Lerp) for both node
-       positions and sizes, ensuring fluid animations as the tree grows.
+     - Trees: High-detail warehouse floor with shelves and conveyors.
+     - Sorting: Gantry Crane and glowing containers.
+     - Arrays: Multi-level Pallet Racking system.
    - Animation Strategy:
-     - Uses Strict Sequential Processing and callback-driven event chains.
-     - Packages in the BST track and "attach" to Logical Node Objects, allowing
-       them to follow the tree even as it resizes/moves during animation.
-     - A `DroneSprite` visualizes traversals by sequentially moving to each node
-       in the path provided by the `BSTManager`.
+     - `DroneSprite`: Visualizes tree traversals.
+     - `GantryCraneSprite`: Visualizes sorting swaps.
+     - `MagneticCraneSprite`: Visualizes recursive moves.
+     - `ForkliftSprite`: Visualizes Array Writes. Features a complex state machine 
+       (Move -> Lift -> MoveIn -> Drop -> MoveOut -> Lower -> Return) to ensure 
+       precise cargo placement on shelves.
+   - Smart Layouts:
+     - Trees use "Smooth Zoom" to fit nodes.
+     - Arrays use a "Multi-Aisle" system, automatically stacking shelves vertically
+       when the array size increases (10, 20, or 30 slots).
 
 4. UI & INTERACTION (The Handheld)
    - Style: Rugged Industrial Scanner (Zebra/Honeywell aesthetic).
    - Components: 
-     - `HandheldChassis`: Draws the device body with hazard stripes and bolts.
-     - `LCDDisplay`: Retro green-screen text input with scanlines.
-     - `RoundButton`: Tactile rubber buttons with 3D bevels.
+     - `HandheldChassis`: Draws the device body.
+     - `LCDDisplay`: Features scrolling text and handles user input.
+     - `RoundButton` & `Button`: Tactile UI elements.
    - Popups & Overlays:
-     - Traversal selection is handled via a clean, modal overlay menu.
-     - Traversal results are displayed on a thematic "Scan Manifest" popup,
-       which appears only after the drone animation is complete.
+     - Analysis, Algorithm Selection, and Manifests are handled via modal overlays.
+     - Manifests support scrolling for large datasets.
 </file>
 
 <file path="Full_Stack_Sim/assets/__init__.py/__init__.py">
@@ -315,9 +327,9 @@ class LCDDisplay:
             elif event.key == pygame.K_RETURN:
                 return self.text
             else:
-                if len(self.text) < 12:
-                    if event.unicode.isalnum() or event.unicode in ':-':
-                        self.text += event.unicode.upper()
+                allowed_chars = ':-+*/^()'
+                if event.unicode.isalnum() or event.unicode in allowed_chars:
+                    self.text += event.unicode.upper()
         return None
     def update_status(self, msg):
         self.status_msg = msg
@@ -331,14 +343,20 @@ class LCDDisplay:
             pygame.draw.line(screen, LCD_SCANLINE, (screen_rect.left, i), (screen_rect.right, i), 1)
         status_surf = self.font_small.render(self.status_msg, True, LCD_TEXT_DIM)
         screen.blit(status_surf, (screen_rect.x + 10, screen_rect.y + 8))
-        txt_surf = self.font_large.render(self.text, True, LCD_TEXT_MAIN)
-        txt_x = screen_rect.centerx - txt_surf.get_width() // 2
+        display_text = self.text
+        txt_surf = self.font_large.render(display_text, True, LCD_TEXT_MAIN)
+        while txt_surf.get_width() > screen_rect.width - 10:
+            display_text = display_text[1:]
+            txt_surf = self.font_large.render(display_text, True, LCD_TEXT_MAIN)
+        txt_x = screen_rect.left + 5
         txt_y = screen_rect.centery - 5
+        screen.set_clip(screen_rect)
         screen.blit(txt_surf, (txt_x, txt_y))
         if (self.cursor_blink // 30) % 2 == 0:
             cursor_x = txt_x + txt_surf.get_width() + 2
-            pygame.draw.rect(screen, LCD_TEXT_MAIN, (cursor_x, txt_y, 10, 24))
-        pygame.draw.line(screen, (255, 255, 255, 20), (screen_rect.right - 30, screen_rect.top), (screen_rect.right, screen_rect.top + 30), 2)
+            if cursor_x < screen_rect.right - 10:
+                pygame.draw.rect(screen, LCD_TEXT_MAIN, (cursor_x, txt_y, 10, 24))
+        screen.set_clip(None)
 class RoundButton:
     def __init__(self, cx, cy, radius, color_base, color_light, text, callback):
         self.center = (cx, cy)
@@ -426,52 +444,144 @@ class Button:
 <file path="Full_Stack_Sim/main.py/main.py">
 import pygame
 import sys
+import math
+import random
 from settings import *
 from core.ui import Button
 from simulation.site_parking_stack import ParkingStackSimulation
 from simulation.site_parking_queue import ParkingQueueSimulation
 from simulation.site_conveyor_list import ConveyorSimulation
 from simulation.site_router_tree import RouterTreeSimulation
+from simulation.site_expression_tree import ExpressionTreeSimulation
+from simulation.site_sorting_floor import SortingSimulation
+from simulation.site_recursion_lab import RecursionSimulation
+from simulation.site_warehouse_array import ArraySimulation
+class MapPin:
+    def __init__(self, x, y, label, sub_label, icon_char, callback):
+        self.x = x
+        self.y = y
+        self.label = label
+        self.sub_label = sub_label
+        self.icon_char = icon_char
+        self.callback = callback
+        self.radius = 25
+        self.hovered = False
+        self.pulse_timer = random.randint(0, 60)
+        self.font_icon = pygame.font.SysFont("Impact", 24)
+        self.font_label = pygame.font.SysFont("Arial", 14, bold=True)
+        self.font_sub = pygame.font.SysFont("Arial", 12)
+    def update(self):
+        self.pulse_timer += 1
+        mouse_pos = pygame.mouse.get_pos()
+        dist = math.hypot(mouse_pos[0] - self.x, mouse_pos[1] - self.y)
+        self.hovered = dist < self.radius
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.hovered:
+                self.callback()
+    def draw(self, screen):
+        pulse_scale = (math.sin(self.pulse_timer * 0.1) + 1) * 0.5
+        pulse_r = self.radius + (pulse_scale * 10)
+        pulse_alpha = int(100 - (pulse_scale * 100))
+        pulse_surf = pygame.Surface((pulse_r*2, pulse_r*2), pygame.SRCALPHA)
+        pygame.draw.circle(pulse_surf, (0, 255, 255, pulse_alpha), (pulse_r, pulse_r), pulse_r)
+        screen.blit(pulse_surf, (self.x - pulse_r, self.y - pulse_r))
+        color = (255, 255, 255) if self.hovered else (0, 200, 200)
+        pygame.draw.circle(screen, (20, 30, 40), (self.x, self.y + 5), self.radius)
+        pygame.draw.circle(screen, (20, 40, 50), (self.x, self.y), self.radius)
+        pygame.draw.circle(screen, color, (self.x, self.y), self.radius, 3)
+        icon_surf = self.font_icon.render(self.icon_char, True, color)
+        screen.blit(icon_surf, (self.x - icon_surf.get_width()//2, self.y - icon_surf.get_height()//2))
+        if self.hovered:
+            bubble_w = 180
+            bubble_h = 50
+            bx = self.x + 35
+            by = self.y - 40
+            pygame.draw.line(screen, (255, 255, 255), (self.x + 15, self.y - 15), (bx, by + 25), 2)
+            bubble_rect = pygame.Rect(bx, by, bubble_w, bubble_h)
+            pygame.draw.rect(screen, (245, 245, 250), bubble_rect, border_radius=8)
+            pygame.draw.rect(screen, (0, 200, 200), bubble_rect, 2, border_radius=8)
+            lbl = self.font_label.render(self.label, True, (20, 20, 20))
+            sub = self.font_sub.render(self.sub_label, True, (100, 100, 100))
+            screen.blit(lbl, (bx + 10, by + 8))
+            screen.blit(sub, (bx + 10, by + 28))
 class MainMenu:
     def __init__(self, screen, switch_callback):
         self.screen = screen
         self.switch_callback = switch_callback
-        self.title_font = pygame.font.SysFont("Impact", 60)
-        self.sub_font = pygame.font.SysFont("Arial", 16)
-        btn_w = 300
-        btn_h = 50
-        center_x = SCREEN_WIDTH // 2 - btn_w // 2
-        start_y = 300
-        gap = 70
-        self.btn_stack = Button(center_x, start_y, btn_w, btn_h, "SITE A: MAINTENANCE BAY (STACK)",
-                                lambda: self.switch_callback("STACK"))
-        self.btn_queue = Button(center_x, start_y + gap, btn_w, btn_h, "SITE B: WEIGH STATION (QUEUE)",
-                                lambda: self.switch_callback("QUEUE"))
-        self.btn_conveyor = Button(center_x, start_y + gap*2, btn_w, btn_h, "SITE C: CONVEYOR BELT (LINKED LIST)",
-                                lambda: self.switch_callback("CONVEYOR"))
-        self.btn_tree = Button(center_x, start_y + gap*3, btn_w, btn_h, "SITE D: ROUTING FLOOR (BST)",
-                                lambda: self.switch_callback("TREE"))
-        self.btn_quit = Button(center_x, start_y + gap*4, btn_w, btn_h, "EXIT SYSTEM",
-                               lambda: self.switch_callback("QUIT"))
+        self.map_surface = self._generate_map_background()
+        self.pins = [
+            MapPin(150, 150, "MAINTENANCE BAY", "SITE A: STACK (LIFO)", "A", lambda: self.switch_callback("STACK")),
+            MapPin(400, 120, "WEIGH STATION", "SITE B: QUEUE (FIFO)", "B", lambda: self.switch_callback("QUEUE")),
+            MapPin(700, 150, "CONVEYOR BELT", "SITE C: LINKED LIST", "C", lambda: self.switch_callback("CONVEYOR")),
+            MapPin(150, 350, "ROUTING FLOOR", "SITE D: BST", "D", lambda: self.switch_callback("TREE")),
+            MapPin(400, 350, "PARSER LAB", "SITE E: EXPR TREE", "E", lambda: self.switch_callback("EXPR_TREE")),
+            MapPin(700, 350, "SORTING FLOOR", "SITE F: ALGORITHMS", "F", lambda: self.switch_callback("SORTING")),
+            MapPin(250, 550, "AUTOMATION LAB", "SITE G: RECURSION", "G", lambda: self.switch_callback("RECURSION")),
+            MapPin(600, 550, "SMART RACK", "SITE H: ARRAYS", "H", lambda: self.switch_callback("ARRAY")),
+        ]
+        self.exit_btn = Button(SCREEN_WIDTH - 120, SCREEN_HEIGHT - 50, 100, 30, "LOGOUT", lambda: self.switch_callback("QUIT"))
+    def _generate_map_background(self):
+        surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        surf.fill((30, 35, 40))
+        pygame.draw.polygon(surf, (20, 40, 50), [(850, 0), (1000, 0), (1000, 300), (800, 150)])
+        road_color = (50, 55, 60)
+        road_width = 40
+        pygame.draw.rect(surf, road_color, (0, 230, SCREEN_WIDTH, road_width))
+        pygame.draw.rect(surf, road_color, (0, 450, SCREEN_WIDTH, road_width))
+        pygame.draw.rect(surf, road_color, (130, 0, road_width, SCREEN_HEIGHT))
+        pygame.draw.rect(surf, road_color, (380, 0, road_width, SCREEN_HEIGHT))
+        pygame.draw.rect(surf, road_color, (680, 0, road_width, SCREEN_HEIGHT))
+        for x in [150, 400, 700]:
+            for y in [250, 470]:
+                pygame.draw.circle(surf, road_color, (x, y), 35)
+                pygame.draw.circle(surf, (60, 65, 70), (x, y), 15)
+        pygame.draw.rect(surf, (40, 45, 50), (80, 80, 140, 140))
+        for i in range(90, 210, 15): pygame.draw.line(surf, (60, 65, 70), (90, i), (120, i), 1)
+        pygame.draw.rect(surf, (40, 45, 50), (330, 80, 140, 100), border_radius=20)
+        pygame.draw.rect(surf, (30, 35, 40), (350, 100, 100, 60), border_radius=20)
+        pygame.draw.rect(surf, (45, 50, 55), (630, 100, 140, 80))
+        pygame.draw.line(surf, (70, 75, 80), (630, 140), (770, 140), 2)
+        pygame.draw.rect(surf, (50, 55, 60), (100, 300, 100, 100))
+        pygame.draw.rect(surf, (30, 35, 40), (120, 320, 60, 60))
+        pygame.draw.polygon(surf, (55, 60, 65), [(400, 290), (460, 320), (460, 380), (400, 410), (340, 380), (340, 320)])
+        pygame.draw.rect(surf, (45, 50, 55), (630, 290, 140, 120))
+        for x in range(640, 770, 10): pygame.draw.line(surf, (35, 40, 45), (x, 290), (x, 410), 1)
+        pygame.draw.rect(surf, (40, 45, 50), (180, 500, 140, 100))
+        pygame.draw.circle(surf, (60, 65, 70), (250, 550), 40, 2)
+        pygame.draw.rect(surf, (45, 50, 55), (530, 500, 140, 100))
+        for y in range(510, 590, 10): pygame.draw.line(surf, (70, 75, 80), (540, y), (660, y), 2)
+        for _ in range(100):
+            tx = random.randint(0, SCREEN_WIDTH)
+            ty = random.randint(0, SCREEN_HEIGHT)
+            if surf.get_at((tx, ty)) == (30, 35, 40):
+                pygame.draw.circle(surf, (35, 50, 40), (tx, ty), random.randint(3, 6))
+        for x in range(0, SCREEN_WIDTH, 50):
+            pygame.draw.line(surf, (255, 255, 255, 10), (x, 0), (x, SCREEN_HEIGHT), 1)
+        for y in range(0, SCREEN_HEIGHT, 50):
+            pygame.draw.line(surf, (255, 255, 255, 10), (0, y), (SCREEN_WIDTH, y), 1)
+        return surf
     def handle_events(self, event):
-        self.btn_stack.handle_event(event)
-        self.btn_queue.handle_event(event)
-        self.btn_conveyor.handle_event(event)
-        self.btn_tree.handle_event(event)
-        self.btn_quit.handle_event(event)
+        for pin in self.pins:
+            pin.handle_event(event)
+        self.exit_btn.handle_event(event)
     def update(self):
-        pass
+        for pin in self.pins:
+            pin.update()
     def draw(self):
-        self.screen.fill((20, 24, 28))
-        title_surf = self.title_font.render("FULL STACK LOGISTICS", True, (220, 220, 225))
-        sub_surf = self.sub_font.render("DATA STRUCTURE VISUALIZATION SUITE", True, (100, 150, 200))
-        self.screen.blit(title_surf, (SCREEN_WIDTH//2 - title_surf.get_width()//2, 150))
-        self.screen.blit(sub_surf, (SCREEN_WIDTH//2 - sub_surf.get_width()//2, 220))
-        self.btn_stack.draw(self.screen)
-        self.btn_queue.draw(self.screen)
-        self.btn_conveyor.draw(self.screen)
-        self.btn_tree.draw(self.screen)
-        self.btn_quit.draw(self.screen)
+        self.screen.blit(self.map_surface, (0, 0))
+        for pin in self.pins:
+            pin.draw(self.screen)
+        self.exit_btn.draw(self.screen)
+        pygame.draw.rect(self.screen, (0, 0, 0, 200), (0, 0, SCREEN_WIDTH, 40))
+        pygame.draw.line(self.screen, (0, 255, 255), (0, 40), (SCREEN_WIDTH, 40), 1)
+        font = pygame.font.SysFont("Consolas", 18)
+        title = font.render("FULL STACK LOGISTICS // COMMAND CENTER", True, (0, 255, 255))
+        self.screen.blit(title, (20, 10))
+        status = font.render("SYSTEM: ONLINE", True, (0, 255, 0))
+        self.screen.blit(status, (SCREEN_WIDTH - 180, 10))
+        for y in range(0, SCREEN_HEIGHT, 4):
+            pygame.draw.line(self.screen, (0, 0, 0, 50), (0, y), (SCREEN_WIDTH, y), 1)
 def main():
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -482,7 +592,7 @@ def main():
         nonlocal current_scene
         if scene_name == "MENU":
             current_scene = MainMenu(screen, switch_scene)
-        elif scene_name in ["STACK", "QUEUE", "CONVEYOR", "TREE"]:
+        elif scene_name in ["STACK", "QUEUE", "CONVEYOR", "TREE", "EXPR_TREE", "SORTING", "RECURSION", "ARRAY"]:
             if scene_name == "STACK":
                 current_scene = ParkingStackSimulation(screen)
             elif scene_name == "QUEUE":
@@ -491,7 +601,15 @@ def main():
                 current_scene = ConveyorSimulation(screen)
             elif scene_name == "TREE":
                 current_scene = RouterTreeSimulation(screen)
-            back_btn = Button(10, 10, 100, 30, "< MENU", lambda: switch_scene("MENU"))
+            elif scene_name == "EXPR_TREE":
+                current_scene = ExpressionTreeSimulation(screen)
+            elif scene_name == "SORTING":
+                current_scene = SortingSimulation(screen)
+            elif scene_name == "RECURSION":
+                current_scene = RecursionSimulation(screen)
+            elif scene_name == "ARRAY":
+                current_scene = ArraySimulation(screen)
+            back_btn = Button(10, 10, 100, 30, "< MAP", lambda: switch_scene("MENU"))
             original_handle = current_scene.handle_events
             original_draw = current_scene.draw
             def new_handle(event):
@@ -546,6 +664,8 @@ LCD_TEXT_DIM     = (0, 150, 120)
 LCD_SCANLINE     = (0, 20, 20)
 BTN_GREEN_BASE   = (0, 160, 60)
 BTN_GREEN_LIGHT  = (50, 200, 100)
+BTN_ALT_GREEN_BASE = (0, 180, 100)
+BTN_ALT_GREEN_LIGHT = (50, 220, 140)
 BTN_RED_BASE     = (180, 40, 40)
 BTN_RED_LIGHT    = (220, 80, 80)
 BTN_BLUE_BASE    = (40, 100, 180)
@@ -875,6 +995,427 @@ class ConveyorSimulation:
         self.draw_placement_markers(); self.chassis.draw(self.screen)
         self.lcd.draw(self.screen); self.btn_append.draw(self.screen)
         self.btn_insert.draw(self.screen); self.btn_remove.draw(self.screen)
+</file>
+
+<file path="Full_Stack_Sim/simulation/site_expression_tree.py/site_expression_tree.py">
+import pygame
+import math
+import random
+from settings import *
+from core.ui import HandheldChassis, LCDDisplay, RoundButton, Button
+class Node:
+    def __init__(self, value):
+        self.value = value
+        self.left = None
+        self.right = None
+        self.x = 0; self.y = 0
+        self.target_x = 0; self.target_y = 0
+class ExpressionTreeManager:
+    def __init__(self):
+        self.root = None
+        self.current_depth = 0
+        self.precedence = {'+': 1, '-': 1, '*': 2, '/': 2, '^': 3}
+    def _is_operator(self, char):
+        return char in "+-*/^"
+    def _infix_to_postfix(self, expression):
+        stack = []; output = []
+        for char in expression:
+            if char.isalnum():
+                output.append(char)
+            elif char == '(':
+                stack.append(char)
+            elif char == ')':
+                while stack and stack[-1] != '(':
+                    output.append(stack.pop())
+                if stack and stack[-1] == '(':
+                    stack.pop()
+            elif self._is_operator(char):
+                while (stack and self._is_operator(stack[-1])):
+                    p_stack = self.precedence.get(stack[-1], 0)
+                    p_char = self.precedence.get(char, 0)
+                    is_right_assoc = char == '^'
+                    if (p_stack > p_char) or (p_stack == p_char and not is_right_assoc):
+                        output.append(stack.pop())
+                    else:
+                        break
+                stack.append(char)
+        while stack:
+            output.append(stack.pop())
+        return output
+    def build_from_expression(self, expression):
+        expression = "".join(filter(lambda x: not x.isspace(), expression))
+        if not expression: return False
+        try:
+            postfix = self._infix_to_postfix(expression)
+            stack = []
+            for char in postfix:
+                if char.isalnum():
+                    stack.append(Node(char))
+                elif self._is_operator(char):
+                    if len(stack) < 2: return False
+                    node = Node(char)
+                    node.right = stack.pop()
+                    node.left = stack.pop()
+                    stack.append(node)
+            if len(stack) != 1: return False
+            self.root = stack[0]
+            self.current_depth = 0
+            self._calculate_depth(self.root, 0)
+            return True
+        except (IndexError, Exception):
+            return False
+    def _get_label_from_index(self, n):
+        label = ""
+        if n < 0: return ""
+        while True:
+            label = chr(n % 26 + ord('A')) + label
+            n = n // 26 - 1
+            if n < 0:
+                break
+        return label
+    def build_from_levels(self, num_levels):
+        if not 1 <= num_levels <= 5: return False
+        node_index = 0
+        self.root = Node(self._get_label_from_index(node_index))
+        node_index += 1
+        queue = [self.root]
+        for level in range(num_levels - 1):
+            for _ in range(len(queue)):
+                current = queue.pop(0)
+                current.left = Node(self._get_label_from_index(node_index))
+                node_index += 1
+                queue.append(current.left)
+                current.right = Node(self._get_label_from_index(node_index))
+                node_index += 1
+                queue.append(current.right)
+        self.current_depth = num_levels - 1
+        return True
+    def _calculate_depth(self, node, depth):
+        if node is None: return
+        self.current_depth = max(self.current_depth, depth)
+        self._calculate_depth(node.left, depth + 1)
+        self._calculate_depth(node.right, depth + 1)
+    def get_traversals(self):
+        return {
+            "TLR": self._get_pre_order(self.root),
+            "LTR": self._get_in_order(self.root),
+            "LRT": self._get_post_order(self.root)
+        }
+    def _get_pre_order(self, node):
+        if not node: return []
+        return [node] + self._get_pre_order(node.left) + self._get_pre_order(node.right)
+    def _get_in_order(self, node):
+        if not node: return []
+        return self._get_in_order(node.left) + [node] + self._get_in_order(node.right)
+    def _get_post_order(self, node):
+        if not node: return []
+        return self._get_post_order(node.left) + self._get_post_order(node.right) + [node]
+class DroneSprite(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        self.pos_x = float(x); self.pos_y = float(y)
+        self.target_x = float(x); self.target_y = float(y)
+        self.is_moving = False; self.on_finish_callback = None
+        self.rotor_angle = 0
+        self.current_size = 0
+        self.original_image = None
+        self.rotor_image = None
+        self.image = pygame.Surface((1,1))
+        self.rect = self.image.get_rect(center=(x,y))
+        self.resize(40)
+    def resize(self, size):
+        s = int(size)
+        if s < 15: s = 15
+        if self.current_size == s: return
+        self.current_size = s
+        self.original_image = pygame.Surface((s, s), pygame.SRCALPHA)
+        center = s // 2
+        chassis_radius = s * 0.25
+        arm_length = s * 0.5
+        rotor_radius = s * 0.12
+        arm_color = (80, 85, 90)
+        pygame.draw.line(self.original_image, arm_color, (center, center), (center - arm_length, center - arm_length), 3)
+        pygame.draw.line(self.original_image, arm_color, (center, center), (center + arm_length, center - arm_length), 3)
+        pygame.draw.line(self.original_image, arm_color, (center, center), (center - arm_length, center + arm_length), 3)
+        pygame.draw.line(self.original_image, arm_color, (center, center), (center + arm_length, center + arm_length), 3)
+        pod_color = (50, 55, 60)
+        pygame.draw.circle(self.original_image, pod_color, (center - arm_length, center - arm_length), rotor_radius)
+        pygame.draw.circle(self.original_image, pod_color, (center + arm_length, center - arm_length), rotor_radius)
+        pygame.draw.circle(self.original_image, pod_color, (center - arm_length, center + arm_length), rotor_radius)
+        pygame.draw.circle(self.original_image, pod_color, (center + arm_length, center + arm_length), rotor_radius)
+        pygame.draw.circle(self.original_image, (0,0,0,80), (center+2, center+2), chassis_radius)
+        pygame.draw.circle(self.original_image, (180,185,190), (center, center), chassis_radius)
+        pygame.draw.circle(self.original_image, (100,105,110), (center, center), chassis_radius, 1)
+        pygame.draw.circle(self.original_image, (255, 80, 80), (center, center), chassis_radius * 0.5)
+        pygame.draw.circle(self.original_image, (255, 150, 150), (center-1, center-1), chassis_radius * 0.2)
+        self.rotor_image = pygame.Surface((s,s), pygame.SRCALPHA)
+        blade_color = (50,55,60,180)
+        blade_length = rotor_radius * 1.5
+        for angle in [45, 135, 225, 315]:
+            rad = math.radians(angle)
+            end_x = center + math.cos(rad) * arm_length
+            end_y = center + math.sin(rad) * arm_length
+            pygame.draw.line(self.rotor_image, blade_color, (end_x - blade_length, end_y), (end_x + blade_length, end_y), 2)
+    def move_to(self, target_pos, callback=None):
+        self.target_x, self.target_y = target_pos
+        self.on_finish_callback = callback
+        self.is_moving = True
+    def update(self):
+        self.rotor_angle = (self.rotor_angle + 45) % 360
+        if self.is_moving:
+            dx = self.target_x - self.pos_x; dy = self.target_y - self.pos_y
+            dist = math.sqrt(dx**2 + dy**2)
+            if dist < 3.0:
+                self.pos_x, self.pos_y = self.target_x, self.target_y
+                self.is_moving = False
+                if self.on_finish_callback:
+                    cb = self.on_finish_callback; self.on_finish_callback = None; cb()
+            else:
+                self.pos_x += dx * 0.15; self.pos_y += dy * 0.15
+        self.image = self.original_image.copy()
+        rotated_rotors = pygame.transform.rotate(self.rotor_image, self.rotor_angle)
+        rotor_rect = rotated_rotors.get_rect(center=self.image.get_rect().center)
+        self.image.blit(rotated_rotors, rotor_rect)
+        self.rect = self.image.get_rect(center=(int(self.pos_x), int(self.pos_y)))
+class ExpressionTreeSimulation:
+    def __init__(self, screen):
+        self.screen = screen
+        self.logic = ExpressionTreeManager()
+        self.all_sprites = pygame.sprite.Group()
+        self.ui_x = 750; self.ui_w = 250
+        self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
+        self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
+        self.lcd.update_status("EXPRESSION PARSER")
+        btn_cx = self.ui_x + self.ui_w // 2
+        gen_y = 280; btn_radius = 40; h_gap = 15
+        self.btn_gen_levels = RoundButton(btn_cx - btn_radius - h_gap, gen_y, btn_radius, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "LEVELS", self.action_gen_levels)
+        self.btn_gen_expr = RoundButton(btn_cx + btn_radius + h_gap, gen_y, btn_radius, BTN_ALT_GREEN_BASE, BTN_ALT_GREEN_LIGHT, "EXPR", self.action_gen_expr)
+        self.btn_analyze = RoundButton(btn_cx, 420, 40, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "ANALYZE", self.action_open_analysis_menu)
+        self.btn_clear = RoundButton(btn_cx, 520, 40, BTN_RED_BASE, BTN_RED_LIGHT, "CLEAR", self.action_clear)
+        self.SIM_WIDTH = 750; self.TOP_MARGIN = 120; self.BOTTOM_MARGIN = 50
+        self.ROOT_X = self.SIM_WIDTH // 2; self.current_node_size = 80; self.belt_offset = 0
+        self.show_analysis_menu = False; self.manifest_data = None; self.pending_report_data = None
+        menu_btn_w, menu_btn_h = 200, 40; menu_cx = self.SIM_WIDTH // 2; menu_start_y = 250
+        self.menu_btn_tlr = Button(menu_cx - menu_btn_w//2, menu_start_y, menu_btn_w, menu_btn_h, "TLR (Pre-Order)", lambda: self.action_traverse("TLR"))
+        self.menu_btn_ltr = Button(menu_cx - menu_btn_w//2, menu_start_y + 50, menu_btn_w, menu_btn_h, "LTR (In-Order)", lambda: self.action_traverse("LTR"))
+        self.menu_btn_lrt = Button(menu_cx - menu_btn_w//2, menu_start_y + 100, menu_btn_w, menu_btn_h, "LRT (Post-Order)", lambda: self.action_traverse("LRT"))
+        self.is_traversing = False; self.traversal_path = []; self.traversal_index = 0
+        self.highlighted_node = None; self.highlight_timer = 0
+        self.drone = DroneSprite(-50, -50); self.all_sprites.add(self.drone)
+        self.bg_surface = self._generate_background()
+    def _generate_background(self):
+        bg = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        bg.fill(WALL_BASE_COLOR)
+        self._draw_shelf_unit(bg, 0, 100, SCREEN_WIDTH, SCREEN_HEIGHT / 2, 8, 25)
+        for i in range(7):
+            self._draw_pillar(bg, 50 + i * 150, 0, 20, SCREEN_HEIGHT)
+        floor_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        floor_surf.set_colorkey((0,0,0))
+        for _ in range(15000):
+            color = random.choice([CONCRETE_NOISE_1, CONCRETE_NOISE_2])
+            floor_surf.set_at((random.randint(0, SCREEN_WIDTH - 1), random.randint(0, SCREEN_HEIGHT - 1)), color)
+        bg.blit(floor_surf, (0, 0))
+        pygame.draw.rect(bg, (40,45,50), (0,0,SCREEN_WIDTH, 80))
+        light_fixtures = []
+        for i in range(0, SCREEN_WIDTH, 150):
+            pygame.draw.rect(bg, (20,22,25), (i, 30, 100, 10))
+            pygame.draw.rect(bg, FLUORESCENT_LIGHT, (i+2, 32, 96, 6))
+            light_fixtures.append((i+50, 40))
+        light_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        for lx, ly in light_fixtures:
+            points = [(lx - 30, ly), (lx + 30, ly), (lx + 100, SCREEN_HEIGHT), (lx - 100, SCREEN_HEIGHT)]
+            pygame.draw.polygon(light_layer, LIGHT_RAY_COLOR, points)
+        bg.blit(light_layer, (0,0))
+        return bg
+    def _draw_shelf_unit(self, surf, x, y, w, h, rows, cols):
+        for r in range(rows):
+            ry = y + r * (h/rows)
+            for c in range(cols):
+                cx = x + c * (w/cols)
+                shelf_rect = pygame.Rect(cx, ry, w/cols, h/rows)
+                pygame.draw.rect(surf, (40,45,50), shelf_rect, 1)
+                if random.random() > 0.2:
+                    box_w = random.randint(10, int(w/cols - 5))
+                    box_h = random.randint(5, int(h/rows - 5))
+                    box_x = cx + random.randint(2, int(w/cols - box_w - 2))
+                    box_y = ry + int(h/rows - box_h - 2)
+                    color = random.choice([BOX_COLOR_1, BOX_COLOR_2, (160, 110, 50)])
+                    pygame.draw.rect(surf, color, (box_x, box_y, box_w, box_h))
+    def _draw_pillar(self, surf, x, y, w, h):
+        pygame.draw.rect(surf, (90, 95, 100), (x+w, y, 10, h))
+        pygame.draw.rect(surf, (110, 115, 120), (x, y, w, h))
+    def _recalculate_layout(self, node, x, y, level, width_spread):
+        if node is None: return
+        node.target_x = x; node.target_y = y
+        depth = self.logic.current_depth
+        level_height = (SCREEN_HEIGHT - self.TOP_MARGIN - self.BOTTOM_MARGIN) / max(1, depth) if depth > 0 else 0
+        next_spread = width_spread / 2
+        self._recalculate_layout(node.left, x - next_spread, y + level_height, level + 1, next_spread)
+        self._recalculate_layout(node.right, x + next_spread, y + level_height, level + 1, next_spread)
+    def _update_node_positions(self, node):
+        if node is None: return
+        dx = node.target_x - node.x; dy = node.target_y - node.y
+        if abs(dx) > 0.1 or abs(dy) > 0.1:
+            node.x += dx * 0.1; node.y += dy * 0.1
+        else:
+            node.x, node.y = node.target_x, node.target_y
+        self._update_node_positions(node.left); self._update_node_positions(node.right)
+    def draw_conveyor_line(self, start, end):
+        dist = math.hypot(end[0]-start[0], end[1]-start[1])
+        if dist == 0: return
+        angle = math.atan2(end[1]-start[1], end[0]-start[0]); perp_angle = angle + math.pi / 2
+        w = self.current_node_size * 0.4
+        dx, dy = math.cos(perp_angle) * w/2, math.sin(perp_angle) * w/2
+        points = [(start[0] - dx, start[1] - dy), (start[0] + dx, start[1] + dy),
+                  (end[0] + dx, end[1] + dy), (end[0] - dx, end[1] - dy)]
+        pygame.draw.polygon(self.screen, (40,40,45), points)
+        num_stripes = int(dist / 20)
+        if num_stripes > 0:
+            for i in range(num_stripes + 2):
+                t = (i - self.belt_offset / 20) / num_stripes
+                if 0 <= t <= 1:
+                    px1 = start[0] + (end[0]-start[0]) * t; py1 = start[1] + (end[1]-start[1]) * t
+                    pygame.draw.line(self.screen, (60,60,65), (px1 - dx, py1 - dy), (px1 + dx, py1 + dy), 2)
+        pygame.draw.line(self.screen, (90,95,100), points[0], points[3], 5)
+        pygame.draw.line(self.screen, (90,95,100), points[1], points[2], 5)
+    def draw_tree(self, node):
+        if node is None: return
+        if node.left:
+            self.draw_conveyor_line((node.x, node.y), (node.left.x, node.left.y)); self.draw_tree(node.left)
+        if node.right:
+            self.draw_conveyor_line((node.x, node.y), (node.right.x, node.right.y)); self.draw_tree(node.right)
+        s = int(self.current_node_size); rect = pygame.Rect(0, 0, s, s); rect.center = (node.x, node.y)
+        pygame.draw.rect(self.screen, (30,30,35), rect.move(3,3), border_radius=5)
+        pygame.draw.rect(self.screen, (80,85,90), rect, border_radius=5)
+        is_op = not node.value.isalnum()
+        screen_color = (255, 200, 0) if is_op else (150,155,160)
+        pygame.draw.rect(self.screen, screen_color, rect.inflate(-10, -10), border_radius=3)
+        if self.highlighted_node == node and self.highlight_timer > 0:
+            pygame.draw.rect(self.screen, (50, 255, 200), rect, 3, border_radius=5)
+        font_size = max(14, int(s * 0.5)); font = pygame.font.SysFont("Impact", font_size)
+        txt = font.render(str(node.value), True, (20, 20, 20))
+        self.screen.blit(txt, (rect.centerx - txt.get_width()//2, rect.centery - txt.get_height()//2))
+    def action_gen_levels(self):
+        text = self.lcd.text
+        if not text.isdigit() or not (1 <= int(text) <= 5):
+            self.lcd.update_status("ERR: LVL 1-5 ONLY"); return
+        if self.logic.build_from_levels(int(text)):
+            self.manifest_data = None; self.lcd.update_status("TREE GENERATED"); self.lcd.text = ""
+    def action_gen_expr(self):
+        text = self.lcd.text.upper()
+        if not text: self.lcd.update_status("ERR: NO INPUT"); return
+        if self.logic.build_from_expression(text):
+            self.manifest_data = None; self.lcd.update_status("EXPR PARSED"); self.lcd.text = ""
+        else:
+            self.lcd.update_status("ERR: INVALID EXPR")
+    def action_clear(self):
+        self.logic.root = None; self.manifest_data = None
+        self.lcd.update_status("SYSTEM CLEARED"); self.lcd.text = ""
+    def action_open_analysis_menu(self):
+        if self.is_traversing or not self.logic.root: return
+        self.show_analysis_menu = True
+    def action_traverse(self, order_type):
+        self.show_analysis_menu = False
+        all_traversals = self.logic.get_traversals()
+        self.traversal_path = all_traversals[order_type]
+        self.pending_report_data = {
+            "title": f"{order_type} (Post-Order)" if order_type == "LRT" else f"{order_type} (Pre-Order)" if order_type == "TLR" else f"{order_type} (In-Order)",
+            "path": " ".join([node.value for node in self.traversal_path])
+        }
+        self.is_traversing = True; self.traversal_index = 0
+        self.drone.pos_x, self.drone.pos_y = self.ROOT_X, 20
+        self.lcd.update_status("ANALYZING..."); self.process_next_traversal_step()
+    def process_next_traversal_step(self):
+        if self.traversal_index >= len(self.traversal_path):
+            self.on_traversal_complete(); return
+        node_to_visit = self.traversal_path[self.traversal_index]
+        self.drone.move_to((node_to_visit.x, node_to_visit.y), callback=self.on_drone_arrival)
+    def on_drone_arrival(self):
+        node = self.traversal_path[self.traversal_index]
+        self.highlighted_node = node; self.highlight_timer = 20
+        self.traversal_index += 1; self.process_next_traversal_step()
+    def on_traversal_complete(self):
+        self.is_traversing = False; self.traversal_path = []; self.traversal_index = 0
+        self.drone.move_to((-50, -50)); self.lcd.update_status("ANALYSIS DONE")
+        self.manifest_data = self.pending_report_data; self.pending_report_data = None
+    def handle_events(self, event):
+        if self.show_analysis_menu:
+            self.menu_btn_tlr.handle_event(event); self.menu_btn_ltr.handle_event(event); self.menu_btn_lrt.handle_event(event)
+            if event.type == pygame.MOUSEBUTTONDOWN and not (self.menu_btn_tlr.is_hovered or self.menu_btn_ltr.is_hovered or self.menu_btn_lrt.is_hovered):
+                self.show_analysis_menu = False
+            return
+        if self.manifest_data and not self.is_traversing:
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                self.manifest_data = None; self.lcd.update_status("READY")
+            return
+        self.lcd.handle_event(event); self.btn_gen_levels.handle_event(event)
+        self.btn_gen_expr.handle_event(event); self.btn_analyze.handle_event(event); self.btn_clear.handle_event(event)
+    def update(self):
+        if self.show_analysis_menu: return
+        self.belt_offset = (self.belt_offset + 2) % 20
+        if self.highlight_timer > 0:
+            self.highlight_timer -= 1
+            if self.highlight_timer == 0: self.highlighted_node = None
+        if self.logic.root:
+            depth = self.logic.current_depth
+            slot_width = self.SIM_WIDTH / max(1, 2 ** depth)
+            target_node_size = int(slot_width * 0.50)
+            if target_node_size > 80: target_node_size = 80
+            if target_node_size < 30: target_node_size = 30
+            size_diff = target_node_size - self.current_node_size
+            if abs(size_diff) > 0.1: self.current_node_size += size_diff * 0.1
+            else: self.current_node_size = target_node_size
+            self._recalculate_layout(self.logic.root, self.ROOT_X, self.TOP_MARGIN, 0, self.SIM_WIDTH / 2)
+            self._update_node_positions(self.logic.root)
+            self.drone.resize(self.current_node_size * 0.8)
+        self.all_sprites.update(); self.lcd.update()
+    def draw_analysis_menu(self):
+        overlay = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA); overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+        font_title = pygame.font.SysFont("Impact", 30)
+        title_surf = font_title.render("SELECT ANALYSIS METHOD", True, WHITE)
+        self.screen.blit(title_surf, (self.SIM_WIDTH//2 - title_surf.get_width()//2, 180))
+        self.menu_btn_tlr.draw(self.screen); self.menu_btn_ltr.draw(self.screen); self.menu_btn_lrt.draw(self.screen)
+    def draw_manifest(self):
+        overlay = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA); overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+        w, h = 500, 220; x, y = (self.SIM_WIDTH - w) // 2, (SCREEN_HEIGHT - h) // 2
+        pygame.draw.rect(self.screen, (0,0,0,80), (x+5, y+5, w, h), border_radius=3)
+        pygame.draw.rect(self.screen, (230, 230, 220), (x, y, w, h), border_radius=3)
+        pygame.draw.rect(self.screen, (100,100,100), (x,y,w,h), 1, border_radius=3)
+        font_header = pygame.font.SysFont("Courier New", 18, bold=True)
+        header_surf = font_header.render("ANALYSIS MANIFEST", True, (30,30,30))
+        self.screen.blit(header_surf, (x + w//2 - header_surf.get_width()//2, y + 20))
+        pygame.draw.line(self.screen, (180,180,170), (x+20, y+50), (x+w-20, y+50), 1)
+        font_label = pygame.font.SysFont("Courier New", 16, bold=True)
+        font_result = pygame.font.SysFont("Courier New", 20)
+        label_surf = font_label.render(self.manifest_data['title'] + ":", True, (80,80,80))
+        self.screen.blit(label_surf, (x+20, y + 70))
+        words = self.manifest_data["path"].split(' ')
+        lines = []; current_line = ""
+        for word in words:
+            test_line = current_line + word + " "
+            if font_result.size(test_line)[0] < w - 40:
+                current_line = test_line
+            else:
+                lines.append(current_line); current_line = word + " "
+        lines.append(current_line)
+        line_y = y + 100
+        for line in lines:
+            result_surf = font_result.render(line, True, (40, 40, 40))
+            self.screen.blit(result_surf, (x + 25, line_y)); line_y += 25
+        font_prompt = pygame.font.SysFont("Arial", 12)
+        prompt_surf = font_prompt.render("Click anywhere to dismiss", True, (150, 150, 150))
+        self.screen.blit(prompt_surf, (x + w - prompt_surf.get_width() - 10, y + h - prompt_surf.get_height() - 10))
+    def draw(self):
+        self.screen.blit(self.bg_surface, (0, 0))
+        self.draw_tree(self.logic.root)
+        self.all_sprites.draw(self.screen)
+        self.chassis.draw(self.screen); self.lcd.draw(self.screen)
+        self.btn_gen_levels.draw(self.screen); self.btn_gen_expr.draw(self.screen)
+        self.btn_analyze.draw(self.screen); self.btn_clear.draw(self.screen)
+        if self.show_analysis_menu: self.draw_analysis_menu()
+        elif self.manifest_data: self.draw_manifest()
 </file>
 
 <file path="Full_Stack_Sim/simulation/site_parking_queue.py/site_parking_queue.py">
@@ -1566,6 +2107,431 @@ class ParkingStackSimulation:
             self.draw_summary_overlay()
 </file>
 
+<file path="Full_Stack_Sim/simulation/site_recursion_lab.py/site_recursion_lab.py">
+import pygame
+import random
+from settings import *
+from core.ui import HandheldChassis, LCDDisplay, RoundButton, Button
+class RecursionManager:
+    def __init__(self):
+        self.num_disks = 0
+    def generate_moves_from_current_state(self, num_disks, current_pegs, destination_peg):
+        self.num_disks = num_disks
+        moves = []
+        def find_disk(disk_val, pegs):
+            for peg_name, disk_list in pegs.items():
+                if disk_val in disk_list: return peg_name
+            return None
+        def _solve(n, dest):
+            if n == 0: return
+            src = find_disk(n, current_pegs)
+            aux = [p for p in ['A', 'B', 'C'] if p != src and p != dest][0]
+            if src == dest:
+                _solve(n - 1, dest)
+            else:
+                _solve(n - 1, aux)
+                moves.append({'from': src, 'to': dest})
+                current_pegs[src].remove(n)
+                current_pegs[dest].append(n)
+                _solve(n - 1, dest)
+        _solve(num_disks, destination_peg)
+        return moves
+class DiskSprite(pygame.sprite.Sprite):
+    def __init__(self, value, max_value, height, color):
+        super().__init__()
+        self.value = value
+        min_width = 80; max_width = 240
+        self.width = int(min_width + (value / max_value) * (max_width - min_width))
+        self.height = height; self.color = color
+        self.pos_x, self.pos_y = 0.0, 0.0; self.target_x, self.target_y = 0.0, 0.0
+        self.is_moving = False; self.on_finish_callback = None; self.attached_to = None
+        self.is_dropping = False
+        self.is_bouncing = False
+        self.drop_velocity = 0.0
+        self.gravity = 0.8
+        self.bounce_factor = -0.4
+        self.image = self._create_surface()
+        self.rect = self.image.get_rect(midbottom=(0,0))
+    def _create_surface(self):
+        padding = 8
+        surf = pygame.Surface((self.width + padding, self.height + padding), pygame.SRCALPHA)
+        shadow_rect = pygame.Rect(padding, padding, self.width, self.height)
+        pygame.draw.rect(surf, (0,0,0,50), shadow_rect, border_radius=4)
+        main_rect = pygame.Rect(0, 0, self.width, self.height)
+        dark_color = (self.color[0] * 0.7, self.color[1] * 0.7, self.color[2] * 0.7)
+        highlight_color = (min(255, self.color[0] * 1.2), min(255, self.color[1] * 1.2), min(255, self.color[2] * 1.2))
+        pygame.draw.rect(surf, self.color, main_rect, border_radius=4)
+        pygame.draw.rect(surf, highlight_color, (0, 0, self.width, self.height // 4), border_top_left_radius=4, border_top_right_radius=4)
+        for i in range(int(self.width * 0.1), int(self.width * 0.9), 12):
+            pygame.draw.line(surf, dark_color, (i, 0), (i, self.height), 1)
+        corner_size = 6
+        pygame.draw.rect(surf, dark_color, (0,0,corner_size, corner_size))
+        pygame.draw.rect(surf, dark_color, (self.width-corner_size,0,corner_size, corner_size))
+        pygame.draw.rect(surf, dark_color, (0,self.height-corner_size,corner_size, corner_size))
+        pygame.draw.rect(surf, dark_color, (self.width-corner_size,self.height-corner_size,corner_size, corner_size))
+        pygame.draw.rect(surf, (20,20,20,150), main_rect, 2, border_radius=4)
+        font_size = int(self.height * 0.7)
+        try: font = pygame.font.SysFont("Impact", font_size)
+        except: font = pygame.font.SysFont("Arial", font_size - 4, bold=True)
+        text_surf = font.render(str(self.value), True, (255, 255, 255, 180))
+        shadow_surf = font.render(str(self.value), True, (0, 0, 0, 80))
+        text_rect = text_surf.get_rect(center=main_rect.center)
+        surf.blit(shadow_surf, (text_rect.x + 2, text_rect.y + 2))
+        surf.blit(text_surf, text_rect)
+        return surf
+    def move_to(self, target_pos, callback=None):
+        self.target_x, self.target_y = target_pos; self.is_moving = True; self.on_finish_callback = callback
+    def drop_to(self, target_pos, callback=None):
+        self.target_x, self.target_y = target_pos
+        self.is_dropping = True
+        self.on_finish_callback = callback
+    def update(self, speed_multiplier=1.0):
+        if self.attached_to:
+            self.rect.center = (int(self.attached_to.pos_x), self.attached_to.rect.bottom); return
+        if self.is_dropping:
+            self.drop_velocity += self.gravity
+            self.pos_y += self.drop_velocity
+            if self.pos_y >= self.target_y:
+                self.pos_y = self.target_y
+                self.is_dropping = False
+                self.is_bouncing = True
+                self.drop_velocity *= self.bounce_factor
+            self.rect.midbottom = (int(self.pos_x), int(self.pos_y))
+            return
+        if self.is_bouncing:
+            self.drop_velocity += self.gravity
+            self.pos_y += self.drop_velocity
+            if self.pos_y >= self.target_y:
+                self.pos_y = self.target_y
+                self.is_bouncing = False
+                self.drop_velocity = 0
+                if self.on_finish_callback:
+                    cb = self.on_finish_callback
+                    self.on_finish_callback = None
+                    cb()
+            self.rect.midbottom = (int(self.pos_x), int(self.pos_y))
+            return
+        if not self.is_moving: return
+        dx = self.target_x - self.pos_x; dy = self.target_y - self.pos_y
+        dist_sq = dx**2 + dy**2
+        effective_speed = MIN_SPEED * speed_multiplier
+        if dist_sq < effective_speed**2:
+            self.pos_x, self.pos_y = self.target_x, self.target_y; self.is_moving = False
+            if self.on_finish_callback: cb = self.on_finish_callback; self.on_finish_callback = None; cb()
+        else:
+            effective_lerp = LERP_FACTOR * speed_multiplier
+            self.pos_x += dx * effective_lerp; self.pos_y += dy * effective_lerp
+        self.rect.midbottom = (int(self.pos_x), int(self.pos_y))
+class MagneticCraneSprite(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        self.trolley_width, self.trolley_height = 80, 25
+        self.magnet_width, self.magnet_height = 40, 20
+        self.min_cable_length = 20
+        self.pos_x, self.pos_y = float(x), float(y); self.target_x, self.target_y = float(x), float(y)
+        self.is_moving = False; self.move_callback = None
+        self.cable_length = self.min_cable_length
+        self.target_cable_length = self.min_cable_length
+        self.is_hoisting = False; self.hoist_callback = None
+        self.magnet_active = False
+        self.image = self._create_surface()
+        self.rect = self.image.get_rect(midtop=(x, y))
+    def _create_surface(self):
+        total_height = self.trolley_height + self.cable_length + self.magnet_height
+        surf = pygame.Surface((self.trolley_width, total_height), pygame.SRCALPHA)
+        trolley_rect = pygame.Rect(0, 0, self.trolley_width, self.trolley_height)
+        pygame.draw.rect(surf, (80, 85, 90), trolley_rect, border_radius=3)
+        pygame.draw.rect(surf, (50, 55, 60), trolley_rect, 2, border_radius=3)
+        pygame.draw.rect(surf, (40,40,45), (5, -4, 10, 8)); pygame.draw.rect(surf, (40,40,45), (self.trolley_width - 15, -4, 10, 8))
+        center_x = self.trolley_width / 2
+        cable_end_y = self.trolley_height + self.cable_length
+        pygame.draw.line(surf, (50, 55, 60), (center_x - 10, self.trolley_height), (center_x - 10, cable_end_y), 2)
+        pygame.draw.line(surf, (50, 55, 60), (center_x + 10, self.trolley_height), (center_x + 10, cable_end_y), 2)
+        magnet_rect = pygame.Rect(center_x - self.magnet_width/2, cable_end_y, self.magnet_width, self.magnet_height)
+        pygame.draw.rect(surf, (80, 85, 90), magnet_rect, border_radius=3)
+        pygame.draw.rect(surf, (50, 55, 60), magnet_rect, 2, border_radius=3)
+        if self.magnet_active:
+            glow_rect = magnet_rect.inflate(10, 10)
+            glow_surf = pygame.Surface(glow_rect.size, pygame.SRCALPHA)
+            pygame.draw.rect(glow_surf, (255, 200, 0, 100), glow_surf.get_rect(), border_radius=8)
+            surf.blit(glow_surf, (glow_rect.x - magnet_rect.x, glow_rect.y - magnet_rect.y))
+        return surf
+    def set_magnet(self, active):
+        if self.magnet_active != active: self.magnet_active = active; self.image = self._create_surface()
+    def move_to(self, target_pos, callback=None):
+        self.target_x, self.target_y = target_pos; self.is_moving = True; self.move_callback = callback
+    def set_hoist_length(self, length, callback=None):
+        self.target_cable_length = max(self.min_cable_length, length)
+        self.is_hoisting = True; self.hoist_callback = callback
+    def update(self, speed_multiplier=1.0):
+        moved = False
+        if self.is_moving:
+            dx = self.target_x - self.pos_x; dy = self.target_y - self.pos_y
+            if (dx**2 + dy**2) < (MIN_SPEED * speed_multiplier)**2:
+                self.pos_x, self.pos_y = self.target_x, self.target_y; self.is_moving = False
+                if self.move_callback: cb = self.move_callback; self.move_callback = None; cb()
+            else:
+                self.pos_x += dx * LERP_FACTOR * speed_multiplier; self.pos_y += dy * LERP_FACTOR * speed_multiplier
+            moved = True
+        if self.is_hoisting:
+            dc = self.target_cable_length - self.cable_length
+            if abs(dc) < MIN_SPEED * speed_multiplier:
+                self.cable_length = self.target_cable_length; self.is_hoisting = False
+                if self.hoist_callback: cb = self.hoist_callback; self.hoist_callback = None; cb()
+            else:
+                self.cable_length += dc * LERP_FACTOR * speed_multiplier
+            moved = True
+        if moved:
+            self.image = self._create_surface()
+            self.rect = self.image.get_rect(midtop=(int(self.pos_x), int(self.pos_y)))
+class RecursionSimulation:
+    def __init__(self, screen):
+        self.screen = screen; self.logic = RecursionManager()
+        self.SIM_WIDTH = 750; self.FLOOR_Y = SCREEN_HEIGHT - 80
+        self.DISK_HEIGHT = 40; self.GANTRY_Y = 80
+        self.TRAVEL_Y = self.GANTRY_Y
+        self.all_sprites = pygame.sprite.Group(); self.disks = pygame.sprite.Group()
+        self.crane = MagneticCraneSprite(self.SIM_WIDTH / 2, self.TRAVEL_Y)
+        self.all_sprites.add(self.crane)
+        self.ui_x = 750; self.ui_w = 250
+        self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
+        self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
+        btn_cx = self.ui_x + self.ui_w // 2
+        self.btn_load = RoundButton(btn_cx, 280, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "LOAD", self.action_load)
+        self.btn_solve = RoundButton(btn_cx, 390, 45, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "SOLVE", self.action_solve)
+        self.btn_reset = RoundButton(btn_cx, 500, 45, BTN_RED_BASE, BTN_RED_LIGHT, "RESET", self.action_reset)
+        self.game_state = 'IDLE'; self.selected_disk = None; self.source_peg = None
+        self.move_count = 0; self.auto_solve_queue = []; self.show_win_manifest = False
+        self.disks_to_load = []
+        self.visual_pegs = {'A': [], 'B': [], 'C': []}
+        self.peg_coords = {'A': self.SIM_WIDTH * 0.2, 'B': self.SIM_WIDTH * 0.5, 'C': self.SIM_WIDTH * 0.8}
+        self.peg_rects = {p: pygame.Rect(x - 130, self.TRAVEL_Y, 260, self.FLOOR_Y - self.TRAVEL_Y) for p, x in self.peg_coords.items()}
+        self.background = self._generate_static_background()
+        self.action_reset()
+    def _generate_static_background(self):
+        bg = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT)); bg.fill((40, 45, 50))
+        pygame.draw.rect(bg, (180, 185, 190), (0, 0, SCREEN_WIDTH, self.FLOOR_Y))
+        for i in range(4, 0, -1):
+            alpha = 50 + (i * 30)
+            shelf_color = (110, 115, 120, alpha); box_color = (160, 110, 50, alpha)
+            for y in range(150, self.FLOOR_Y, 60):
+                pygame.draw.line(bg, shelf_color, (0, y), (SCREEN_WIDTH, y), 2)
+                for x in range(20, SCREEN_WIDTH, 100):
+                    if random.random() > 0.4: pygame.draw.rect(bg, box_color, (x + i*5 + random.randint(-10,10), y - 40, 30, 40))
+        for i in range(int(SCREEN_WIDTH / 110) + 1):
+            x = i * 110
+            pygame.draw.rect(bg, (140, 145, 150), (x, 0, 25, self.FLOOR_Y))
+            pygame.draw.rect(bg, (120, 125, 130), (x+25, 0, 5, self.FLOOR_Y))
+        pygame.draw.rect(bg, (60,65,70), (0, 0, SCREEN_WIDTH, self.GANTRY_Y + 20))
+        pygame.draw.rect(bg, (50,55,60), (0, self.GANTRY_Y, SCREEN_WIDTH, 15))
+        pygame.draw.rect(bg, (90,95,100), (0, self.GANTRY_Y, SCREEN_WIDTH, 15), 2)
+        floor_rect = pygame.Rect(0, self.FLOOR_Y, SCREEN_WIDTH, SCREEN_HEIGHT - self.FLOOR_Y)
+        bg.fill(FLOOR_COLOR, floor_rect)
+        for _ in range(8000):
+            color = random.choice([CONCRETE_NOISE_1, CONCRETE_NOISE_2])
+            bg.set_at((random.randint(0, SCREEN_WIDTH - 1), random.randint(self.FLOOR_Y, SCREEN_HEIGHT - 1)), color)
+        pygame.draw.line(bg, (0,0,0,80), (0, self.FLOOR_Y), (SCREEN_WIDTH, self.FLOOR_Y), 3)
+        for peg, x_pos in self.peg_coords.items():
+            platform_w, platform_h = 260, 20
+            base_rect = pygame.Rect(x_pos - platform_w/2, self.FLOOR_Y, platform_w, platform_h)
+            pygame.draw.rect(bg, (60,65,70), base_rect); pygame.draw.rect(bg, (90,95,100), base_rect, 2)
+            for i in range(0, platform_w, 20): pygame.draw.line(bg, STRIPE_YELLOW, (base_rect.left + i, base_rect.top), (base_rect.left + i - 10, base_rect.bottom), 3)
+            font = pygame.font.SysFont("Impact", 18); text_surf = font.render(peg, True, (200,200,200, 100))
+            bg.blit(text_surf, (x_pos - text_surf.get_width()/2, self.FLOOR_Y - 30))
+        light_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        for i in range(0, SCREEN_WIDTH, 150):
+            lx, ly = i + 75, 40
+            pygame.draw.rect(bg, FLUORESCENT_LIGHT, (lx - 40, ly-5, 80, 10))
+            points = [(lx, ly), (lx + 100, SCREEN_HEIGHT), (lx - 100, SCREEN_HEIGHT)]
+            pygame.draw.polygon(light_layer, (255, 255, 220, 15), points)
+        bg.blit(light_layer, (0,0))
+        return bg
+    def action_load(self):
+        if self.game_state == 'ANIMATING': return
+        try:
+            num_disks = int(self.lcd.text)
+            if not 3 <= num_disks <= 7: self.lcd.update_status("ERR: USE 3-7 DISKS"); return
+        except ValueError: self.lcd.update_status("ERR: INVALID NUMBER"); return
+        self.action_reset()
+        self.logic.num_disks = num_disks
+        colors = [CONTAINER_RED, CONTAINER_BLUE, (180, 120, 40), (80, 80, 80), (50, 100, 60), (100, 50, 120), (120, 120, 50)]
+        for i in range(num_disks):
+            disk_val = num_disks - i
+            config = {
+                'value': disk_val, 'max_value': num_disks, 'height': self.DISK_HEIGHT,
+                'color': colors[i % len(colors)],
+                'target_x': self.peg_coords['A'],
+                'target_y': self.FLOOR_Y - (i * self.DISK_HEIGHT)
+            }
+            self.disks_to_load.append(config)
+        self.game_state = 'ANIMATING'
+        self.lcd.update_status("LOADING CONTAINERS...")
+        self.animate_next_disk_drop()
+    def animate_next_disk_drop(self):
+        if not self.disks_to_load:
+            self.game_state = 'IDLE'
+            self.update_lcd_status()
+            return
+        config = self.disks_to_load.pop(0)
+        disk = DiskSprite(config['value'], config['max_value'], config['height'], config['color'])
+        disk.pos_x = config['target_x']
+        disk.pos_y = -50
+        self.all_sprites.add(disk); self.disks.add(disk)
+        def on_drop_complete():
+            self.visual_pegs['A'].append(disk)
+            self.animate_next_disk_drop()
+        disk.drop_to((config['target_x'], config['target_y']), on_drop_complete)
+    def action_solve(self):
+        if self.game_state != 'IDLE' or self.logic.num_disks == 0: return
+        self.game_state = 'ANIMATING'; self.lcd.update_status("CALCULATING...")
+        current_peg_state = {p: [d.value for d in disks] for p, disks in self.visual_pegs.items()}
+        self.auto_solve_queue = self.logic.generate_moves_from_current_state(self.logic.num_disks, current_peg_state, 'C')
+        if self.auto_solve_queue: self.lcd.update_status("AUTO-SOLVING..."); self.process_next_auto_move()
+        else: self.game_state = 'IDLE'; self.check_win_condition()
+    def action_reset(self):
+        self.game_state = 'IDLE'; self.selected_disk = None; self.source_peg = None
+        self.move_count = 0; self.logic.num_disks = 0; self.auto_solve_queue.clear()
+        self.disks_to_load.clear()
+        self.show_win_manifest = False
+        for disk in self.disks: disk.kill()
+        self.visual_pegs = {'A': [], 'B': [], 'C': []}
+        self.crane.move_to((self.SIM_WIDTH / 2, self.TRAVEL_Y)); self.crane.set_magnet(False)
+        self.crane.set_hoist_length(self.crane.min_cable_length)
+        self.lcd.update_status("LOAD DISKS [3-7]")
+    def update_lcd_status(self):
+        if self.game_state == 'IDLE': self.lcd.update_status(f"MOVES: {self.move_count} | SELECT DISK")
+        elif self.game_state == 'DISK_SELECTED': self.lcd.update_status(f"MOVES: {self.move_count} | SELECT PEG")
+        elif self.game_state == 'WIN': self.lcd.update_status(f"SOLVED IN {self.move_count} MOVES!")
+    def handle_mouse_click(self, pos):
+        if self.game_state == 'IDLE':
+            for peg_name, peg_disks in self.visual_pegs.items():
+                if peg_disks and peg_disks[-1].rect.collidepoint(pos):
+                    self.source_peg = peg_name; self.selected_disk = peg_disks[-1]
+                    self.game_state = 'ANIMATING'; self.animate_pickup()
+                    return
+        elif self.game_state == 'DISK_SELECTED':
+            for peg_name, rect in self.peg_rects.items():
+                if rect.collidepoint(pos): self.handle_place_attempt(peg_name)
+    def handle_place_attempt(self, dest_peg):
+        is_valid = not self.visual_pegs[dest_peg] or self.selected_disk.value < self.visual_pegs[dest_peg][-1].value
+        self.game_state = 'ANIMATING'
+        if is_valid: self.animate_place(dest_peg)
+        else: self.lcd.update_status("INVALID MOVE! RETURNING..."); self.animate_return()
+    def check_win_condition(self):
+        if self.logic.num_disks > 0 and (len(self.visual_pegs['C']) == self.logic.num_disks or len(self.visual_pegs['B']) == self.logic.num_disks):
+            self.game_state = 'WIN'; self.show_win_manifest = True; return True
+        return False
+    def animate_pickup(self):
+        pickup_x = self.peg_coords[self.source_peg]
+        disk_center_y = self.selected_disk.rect.centery
+        target_cable_len = disk_center_y - self.TRAVEL_Y - self.crane.trolley_height
+        def on_rise(): self.game_state = 'DISK_SELECTED'; self.update_lcd_status()
+        def on_attach(): self.selected_disk.attached_to = self.crane; self.crane.set_magnet(True); self.crane.set_hoist_length(self.crane.min_cable_length, callback=on_rise)
+        def on_lower(): self.crane.set_hoist_length(target_cable_len, callback=on_attach)
+        self.crane.move_to((pickup_x, self.TRAVEL_Y), callback=on_lower)
+    def animate_place(self, dest_peg):
+        dest_x = self.peg_coords[dest_peg]
+        dest_y_bottom = self.FLOOR_Y - (len(self.visual_pegs[dest_peg]) * self.DISK_HEIGHT)
+        dest_y_center = dest_y_bottom - self.DISK_HEIGHT / 2
+        target_cable_len = dest_y_center - self.TRAVEL_Y - self.crane.trolley_height
+        def on_placed():
+            self.selected_disk.pos_x = dest_x; self.selected_disk.pos_y = dest_y_bottom
+            self.visual_pegs[dest_peg].append(self.visual_pegs[self.source_peg].pop())
+            self.selected_disk = None; self.source_peg = None; self.move_count += 1
+            if not self.check_win_condition(): self.game_state = 'IDLE'
+            self.update_lcd_status()
+        def on_detach(): self.selected_disk.attached_to = None; self.crane.set_magnet(False); self.crane.set_hoist_length(self.crane.min_cable_length, callback=on_placed)
+        def on_lower(): self.crane.set_hoist_length(target_cable_len, callback=on_detach)
+        self.crane.move_to((dest_x, self.TRAVEL_Y), callback=on_lower)
+    def animate_return(self):
+        dest_x = self.peg_coords[self.source_peg]
+        dest_y_bottom = self.FLOOR_Y - ((len(self.visual_pegs[self.source_peg]) - 1) * self.DISK_HEIGHT)
+        dest_y_center = dest_y_bottom - self.DISK_HEIGHT / 2
+        target_cable_len = dest_y_center - self.TRAVEL_Y - self.crane.trolley_height
+        def on_returned():
+            self.selected_disk.pos_x = dest_x; self.selected_disk.pos_y = dest_y_bottom
+            self.selected_disk = None; self.source_peg = None; self.game_state = 'IDLE'; self.update_lcd_status()
+        def on_detach(): self.selected_disk.attached_to = None; self.crane.set_magnet(False); self.crane.set_hoist_length(self.crane.min_cable_length, callback=on_returned)
+        def on_lower(): self.crane.set_hoist_length(target_cable_len, callback=on_detach)
+        self.crane.move_to((dest_x, self.TRAVEL_Y), callback=on_lower)
+    def process_next_auto_move(self):
+        if not self.auto_solve_queue:
+            self.game_state = 'IDLE'
+            if not self.check_win_condition(): self.lcd.update_status("AUTO-SOLVE FINISHED!")
+            else: self.update_lcd_status()
+            self.crane.set_magnet(False)
+            return
+        move = self.auto_solve_queue.pop(0)
+        from_peg, to_peg = move['from'], move['to']
+        disk = self.visual_pegs[from_peg][-1]
+        source_x = self.peg_coords[from_peg]; dest_x = self.peg_coords[to_peg]
+        source_y_center = self.FLOOR_Y - ((len(self.visual_pegs[from_peg]) - 1) * self.DISK_HEIGHT) - self.DISK_HEIGHT / 2
+        dest_y_center = self.FLOOR_Y - (len(self.visual_pegs[to_peg]) * self.DISK_HEIGHT) - self.DISK_HEIGHT / 2
+        pickup_cable_len = source_y_center - self.TRAVEL_Y - self.crane.trolley_height
+        place_cable_len = dest_y_center - self.TRAVEL_Y - self.crane.trolley_height
+        def on_raised_final(): self.process_next_auto_move()
+        def on_placed():
+            disk.pos_x = dest_x; disk.pos_y = self.FLOOR_Y - (len(self.visual_pegs[to_peg]) * self.DISK_HEIGHT)
+            self.visual_pegs[to_peg].append(self.visual_pegs[from_peg].pop()); self.move_count += 1; self.update_lcd_status()
+            self.crane.set_hoist_length(self.crane.min_cable_length, callback=on_raised_final)
+        def on_detach(): disk.attached_to = None; self.crane.set_magnet(False); on_placed()
+        def on_lower_to_place(): self.crane.set_hoist_length(place_cable_len, callback=on_detach)
+        def on_move_horizontally(): on_lower_to_place()
+        def on_raised_with_disk(): self.crane.move_to((dest_x, self.TRAVEL_Y), callback=on_move_horizontally)
+        def on_attach(): disk.attached_to = self.crane; self.crane.set_magnet(True); self.crane.set_hoist_length(self.crane.min_cable_length, callback=on_raised_with_disk)
+        def on_lower_to_pickup(): self.crane.set_hoist_length(pickup_cable_len, callback=on_attach)
+        self.crane.move_to((source_x, self.TRAVEL_Y), callback=on_lower_to_pickup)
+    def handle_events(self, event):
+        if self.game_state == 'ANIMATING':
+            self.btn_reset.handle_event(event); return
+        if self.show_win_manifest:
+            if event.type == pygame.MOUSEBUTTONDOWN: self.action_reset()
+            return
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self.handle_mouse_click(event.pos)
+        self.lcd.handle_event(event)
+        self.btn_load.handle_event(event)
+        self.btn_solve.handle_event(event)
+        self.btn_reset.handle_event(event)
+    def update(self):
+        if self.show_win_manifest: return
+        self.all_sprites.update()
+        self.lcd.update()
+    def draw_win_manifest(self):
+        overlay = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA); overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+        w, h = 450, 250; x, y = (self.SIM_WIDTH - w) // 2, (SCREEN_HEIGHT - h) // 2
+        pygame.draw.rect(self.screen, (0,0,0,80), (x+5, y+5, w, h), border_radius=3)
+        pygame.draw.rect(self.screen, (230, 230, 220), (x, y, w, h), border_radius=3)
+        pygame.draw.rect(self.screen, (100,100,100), (x,y,w,h), 1, border_radius=3)
+        font_header = pygame.font.SysFont("Impact", 30)
+        header_surf = font_header.render("PUZZLE COMPLETE", True, (30,30,30))
+        self.screen.blit(header_surf, (x + w//2 - header_surf.get_width()//2, y + 25))
+        pygame.draw.line(self.screen, (180,180,170), (x+20, y+70), (x+w-20, y+70), 2)
+        font_label = pygame.font.SysFont("Courier New", 18, bold=True)
+        font_result = pygame.font.SysFont("Courier New", 20)
+        moves_label = font_label.render("Total Moves:", True, (80,80,80))
+        self.screen.blit(moves_label, (x + 40, y + 100))
+        moves_surf = font_result.render(str(self.move_count), True, (40, 40, 40))
+        self.screen.blit(moves_surf, (x + w - moves_surf.get_width() - 40, y + 100))
+        optimal_moves = 2**self.logic.num_disks - 1
+        optimal_label = font_label.render("Optimal Moves:", True, (80,80,80))
+        self.screen.blit(optimal_label, (x + 40, y + 140))
+        optimal_surf = font_result.render(str(optimal_moves), True, (40, 40, 40))
+        self.screen.blit(optimal_surf, (x + w - optimal_surf.get_width() - 40, y + 140))
+        font_prompt = pygame.font.SysFont("Arial", 12)
+        prompt_surf = font_prompt.render("Click anywhere to reset", True, (150, 150, 150))
+        self.screen.blit(prompt_surf, (x + w - prompt_surf.get_width() - 10, y + h - prompt_surf.get_height() - 10))
+    def draw(self):
+        self.screen.blit(self.background, (0, 0))
+        self.disks.draw(self.screen)
+        self.screen.blit(self.crane.image, self.crane.rect)
+        self.chassis.draw(self.screen); self.lcd.draw(self.screen)
+        self.btn_load.draw(self.screen); self.btn_solve.draw(self.screen); self.btn_reset.draw(self.screen)
+        if self.show_win_manifest:
+            self.draw_win_manifest()
+</file>
+
 <file path="Full_Stack_Sim/simulation/site_router_tree.py/site_router_tree.py">
 import pygame
 import math
@@ -1578,10 +2544,8 @@ class BSTNode:
         self.value = value
         self.left = None
         self.right = None
-        self.x = 0
-        self.y = 0
-        self.target_x = 0
-        self.target_y = 0
+        self.x = 0; self.y = 0
+        self.target_x = 0; self.target_y = 0
         self.push_arm_state = 'idle'
         self.push_arm_timer = 0
 class BSTManager:
@@ -1732,229 +2696,217 @@ class PackageSprite(pygame.sprite.Sprite):
 class DroneSprite(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
-        self.pos_x = float(x)
-        self.pos_y = float(y)
-        self.target_x = float(x)
-        self.target_y = float(y)
-        self.is_moving = False
-        self.on_finish_callback = None
-        self.angle = 0
+        self.pos_x = float(x); self.pos_y = float(y)
+        self.target_x = float(x); self.target_y = float(y)
+        self.is_moving = False; self.on_finish_callback = None
         self.rotor_angle = 0
-        s = 40
+        self.current_size = 0
+        self.original_image = None
+        self.rotor_image = None
+        self.image = pygame.Surface((1,1))
+        self.rect = self.image.get_rect(center=(x,y))
+        self.resize(40)
+    def resize(self, size):
+        s = int(size)
+        if s < 15: s = 15
+        if self.current_size == s: return
+        self.current_size = s
         self.original_image = pygame.Surface((s, s), pygame.SRCALPHA)
-        chassis_rect = pygame.Rect(s//2 - 12, s//2 - 12, 24, 24)
-        pygame.draw.rect(self.original_image, (50,55,60), (chassis_rect.left-5, chassis_rect.top-5, 10, 10), border_radius=2)
-        pygame.draw.rect(self.original_image, (50,55,60), (chassis_rect.right-5, chassis_rect.top-5, 10, 10), border_radius=2)
-        pygame.draw.rect(self.original_image, (50,55,60), (chassis_rect.left-5, chassis_rect.bottom-5, 10, 10), border_radius=2)
-        pygame.draw.rect(self.original_image, (50,55,60), (chassis_rect.right-5, chassis_rect.bottom-5, 10, 10), border_radius=2)
-        pygame.draw.rect(self.original_image, (0,0,0,80), chassis_rect.move(2,2), border_radius=4)
-        pygame.draw.rect(self.original_image, (180,185,190), chassis_rect, border_radius=4)
-        pygame.draw.rect(self.original_image, (100,105,110), chassis_rect, 2, border_radius=4)
-        pygame.draw.circle(self.original_image, (255, 80, 80), chassis_rect.center, 6)
-        pygame.draw.circle(self.original_image, (255, 150, 150), chassis_rect.center, 3)
-        self.image = self.original_image.copy()
-        self.rect = self.image.get_rect(center=(x, y))
+        center = s // 2
+        chassis_radius = s * 0.25
+        arm_length = s * 0.5
+        rotor_radius = s * 0.12
+        arm_color = (80, 85, 90)
+        pygame.draw.line(self.original_image, arm_color, (center, center), (center - arm_length, center - arm_length), 3)
+        pygame.draw.line(self.original_image, arm_color, (center, center), (center + arm_length, center - arm_length), 3)
+        pygame.draw.line(self.original_image, arm_color, (center, center), (center - arm_length, center + arm_length), 3)
+        pygame.draw.line(self.original_image, arm_color, (center, center), (center + arm_length, center + arm_length), 3)
+        pod_color = (50, 55, 60)
+        pygame.draw.circle(self.original_image, pod_color, (center - arm_length, center - arm_length), rotor_radius)
+        pygame.draw.circle(self.original_image, pod_color, (center + arm_length, center - arm_length), rotor_radius)
+        pygame.draw.circle(self.original_image, pod_color, (center - arm_length, center + arm_length), rotor_radius)
+        pygame.draw.circle(self.original_image, pod_color, (center + arm_length, center + arm_length), rotor_radius)
+        pygame.draw.circle(self.original_image, (0,0,0,80), (center+2, center+2), chassis_radius)
+        pygame.draw.circle(self.original_image, (180,185,190), (center, center), chassis_radius)
+        pygame.draw.circle(self.original_image, (100,105,110), (center, center), chassis_radius, 1)
+        pygame.draw.circle(self.original_image, (255, 80, 80), (center, center), chassis_radius * 0.5)
+        pygame.draw.circle(self.original_image, (255, 150, 150), (center-1, center-1), chassis_radius * 0.2)
+        self.rotor_image = pygame.Surface((s,s), pygame.SRCALPHA)
+        blade_color = (50,55,60,180)
+        blade_length = rotor_radius * 1.5
+        for angle in [45, 135, 225, 315]:
+            rad = math.radians(angle)
+            end_x = center + math.cos(rad) * arm_length
+            end_y = center + math.sin(rad) * arm_length
+            pygame.draw.line(self.rotor_image, blade_color, (end_x - blade_length, end_y), (end_x + blade_length, end_y), 2)
     def move_to(self, target_pos, callback=None):
         self.target_x, self.target_y = target_pos
         self.on_finish_callback = callback
         self.is_moving = True
     def update(self):
         self.rotor_angle = (self.rotor_angle + 45) % 360
-        if not self.is_moving: return
-        dx = self.target_x - self.pos_x
-        dy = self.target_y - self.pos_y
-        dist = math.sqrt(dx**2 + dy**2)
-        self.angle = math.degrees(math.atan2(-dy, dx)) - 90
-        if dist < 3.0:
-            self.pos_x, self.pos_y = self.target_x, self.target_y
-            self.is_moving = False
-            if self.on_finish_callback:
-                cb = self.on_finish_callback
-                self.on_finish_callback = None
-                cb()
-        else:
-            self.pos_x += dx * 0.15
-            self.pos_y += dy * 0.15
-        self.rect.center = (int(self.pos_x), int(self.pos_y))
+        if self.is_moving:
+            dx = self.target_x - self.pos_x; dy = self.target_y - self.pos_y
+            dist = math.sqrt(dx**2 + dy**2)
+            if dist < 3.0:
+                self.pos_x, self.pos_y = self.target_x, self.target_y
+                self.is_moving = False
+                if self.on_finish_callback:
+                    cb = self.on_finish_callback; self.on_finish_callback = None; cb()
+            else:
+                self.pos_x += dx * 0.15; self.pos_y += dy * 0.15
+        self.image = self.original_image.copy()
+        rotated_rotors = pygame.transform.rotate(self.rotor_image, self.rotor_angle)
+        rotor_rect = rotated_rotors.get_rect(center=self.image.get_rect().center)
+        self.image.blit(rotated_rotors, rotor_rect)
+        self.rect = self.image.get_rect(center=(int(self.pos_x), int(self.pos_y)))
 class RouterTreeSimulation:
     def __init__(self, screen):
         self.screen = screen
         self.logic = BSTManager()
-        self.all_sprites = pygame.sprite.Group()
         self.packages_group = pygame.sprite.Group()
-        self.ui_x = 750
-        self.ui_w = 250
+        self.drone = DroneSprite(-50, -50)
+        self.drone_group = pygame.sprite.GroupSingle(self.drone)
+        self.ui_x = 750; self.ui_w = 250
         self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
         self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
         self.lcd.update_status("ROUTING SYSTEM")
         btn_cx = self.ui_x + self.ui_w // 2
         self.btn_insert = RoundButton(btn_cx, 280, 45, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "INJECT", self.action_insert)
         self.btn_reset = RoundButton(btn_cx, 390, 45, BTN_RED_BASE, BTN_RED_LIGHT, "FLUSH", self.action_reset)
-        self.btn_scan = RoundButton(btn_cx, 500, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "TRAVERSE", self.action_open_traversal_menu)
+        self.btn_scan = RoundButton(btn_cx, 490, 40, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "SCAN", self.action_open_traversal_menu)
         self.is_animating = False
-        self.SIM_WIDTH = 750
-        self.TOP_MARGIN = 120
-        self.BOTTOM_MARGIN = 50
+        self.SIM_WIDTH = 750; self.TOP_MARGIN = 120; self.BOTTOM_MARGIN = 50
         self.ROOT_X = self.SIM_WIDTH // 2
-        self.target_node_size = 80
-        self.current_node_size = 80
-        self.belt_offset = 0
+        self.target_node_size = 80; self.current_node_size = 80; self.belt_offset = 0
         self.bg_surface = self._generate_background()
-        self.show_traversal_menu = False
-        self.traversal_result_data = None
-        self.pending_report_data = None
-        menu_btn_w, menu_btn_h = 200, 40
-        menu_cx = self.SIM_WIDTH // 2
-        menu_start_y = 250
+        self.show_traversal_menu = False; self.traversal_result_data = None; self.pending_report_data = None
+        menu_btn_w, menu_btn_h = 200, 40; menu_cx = self.SIM_WIDTH // 2; menu_start_y = 250
         self.menu_btn_in = Button(menu_cx - menu_btn_w//2, menu_start_y, menu_btn_w, menu_btn_h, "In-Order Traversal", lambda: self.action_traverse("IN"))
         self.menu_btn_pre = Button(menu_cx - menu_btn_w//2, menu_start_y + 50, menu_btn_w, menu_btn_h, "Pre-Order Traversal", lambda: self.action_traverse("PRE"))
         self.menu_btn_post = Button(menu_cx - menu_btn_w//2, menu_start_y + 100, menu_btn_w, menu_btn_h, "Post-Order Traversal", lambda: self.action_traverse("POST"))
-        self.is_traversing = False
-        self.traversal_path = []
-        self.traversal_index = 0
-        self.highlighted_node = None
-        self.highlight_timer = 0
-        self.drone = DroneSprite(-50, -50)
-        self.all_sprites.add(self.drone)
+        self.is_traversing = False; self.traversal_path = []; self.traversal_index = 0
+        self.highlighted_node = None; self.highlight_timer = 0
     def _generate_background(self):
-        surf = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT))
-        surf.fill(FLOOR_COLOR)
+        bg = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        bg.fill(WALL_BASE_COLOR)
+        self._draw_shelf_unit(bg, 0, 100, SCREEN_WIDTH, SCREEN_HEIGHT / 2, 8, 25)
+        for i in range(7):
+            self._draw_pillar(bg, 50 + i * 150, 0, 20, SCREEN_HEIGHT)
+        floor_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        floor_surf.set_colorkey((0,0,0))
         for _ in range(15000):
             color = random.choice([CONCRETE_NOISE_1, CONCRETE_NOISE_2])
-            surf.set_at((random.randint(0, self.SIM_WIDTH-1), random.randint(0, SCREEN_HEIGHT-1)), color)
-        for _ in range(20):
-            p1 = (random.randint(0, self.SIM_WIDTH-1), random.randint(0, SCREEN_HEIGHT-1))
-            p2 = (p1[0] + random.randint(-40, 40), p1[1] + random.randint(-40, 40))
-            pygame.draw.line(surf, CRACK_COLOR, p1, p2, 1)
-        for y in range(0, SCREEN_HEIGHT, 40):
-            pygame.draw.line(surf, (255, 200, 0, 50), (20, y), (20, y + 20), 3)
-            pygame.draw.line(surf, (255, 200, 0, 50), (self.SIM_WIDTH - 20, y), (self.SIM_WIDTH - 20, y + 20), 3)
-        self._draw_shelf_unit(surf, -80, 0, 120, SCREEN_HEIGHT, 10)
-        self._draw_shelf_unit(surf, self.SIM_WIDTH - 40, 0, 120, SCREEN_HEIGHT, 10)
-        door_w, door_h = 150, 30
-        door_x = self.SIM_WIDTH // 2 - door_w // 2
-        pygame.draw.rect(surf, (40,40,40), (door_x, 0, door_w, door_h))
+            floor_surf.set_at((random.randint(0, SCREEN_WIDTH - 1), random.randint(0, SCREEN_HEIGHT - 1)), color)
+        bg.blit(floor_surf, (0, 0))
+        pygame.draw.rect(bg, (40,45,50), (0,0,SCREEN_WIDTH, 80))
+        light_fixtures = []
+        for i in range(0, SCREEN_WIDTH, 150):
+            pygame.draw.rect(bg, (20,22,25), (i, 30, 100, 10))
+            pygame.draw.rect(bg, FLUORESCENT_LIGHT, (i+2, 32, 96, 6))
+            light_fixtures.append((i+50, 40))
+        door_w, door_h = 150, 30; door_x = self.SIM_WIDTH // 2 - door_w // 2
+        pygame.draw.rect(bg, (40,40,40), (door_x, 0, door_w, door_h))
         for i in range(0, door_w, 15):
-            pygame.draw.line(surf, (60,60,60), (door_x + i, 0), (door_x + i, door_h), 1)
-        pygame.draw.rect(surf, STRIPE_YELLOW, (door_x, 0, door_w, door_h), 3)
-        light_layer = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        for i in range(4):
-            lx = 100 + i * 200
-            points = [(lx - 40, 0), (lx + 40, 0), (lx + 100, SCREEN_HEIGHT), (lx - 100, SCREEN_HEIGHT)]
+            pygame.draw.line(bg, (60,60,60), (door_x + i, 0), (door_x + i, door_h), 1)
+        pygame.draw.rect(bg, STRIPE_YELLOW, (door_x, 0, door_w, door_h), 3)
+        light_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        for lx, ly in light_fixtures:
+            points = [(lx - 30, ly), (lx + 30, ly), (lx + 100, SCREEN_HEIGHT), (lx - 100, SCREEN_HEIGHT)]
             pygame.draw.polygon(light_layer, LIGHT_RAY_COLOR, points)
-        surf.blit(light_layer, (0,0))
-        return surf
-    def _draw_shelf_unit(self, surf, x, y, w, h, rows):
+        bg.blit(light_layer, (0,0))
+        return bg
+    def _draw_shelf_unit(self, surf, x, y, w, h, rows, cols):
         for r in range(rows):
             ry = y + r * (h/rows)
-            shelf_rect = pygame.Rect(x, ry, w, h/rows)
-            pygame.draw.rect(surf, (80,85,90), shelf_rect)
-            pygame.draw.rect(surf, (40,45,50), shelf_rect, 1)
-            for i in range(10):
-                box_w = random.randint(10, 30)
-                box_h = random.randint(10, 20)
-                box_x = x + random.randint(5, w - box_w - 5)
-                box_y = ry + (h/rows) - box_h - 2
-                color = random.choice([BOX_COLOR_1, BOX_COLOR_2, (160, 110, 50)])
-                pygame.draw.rect(surf, color, (box_x, box_y, box_w, box_h))
-                pygame.draw.rect(surf, (0,0,0,50), (box_x, box_y, box_w, box_h), 1)
+            for c in range(cols):
+                cx = x + c * (w/cols)
+                shelf_rect = pygame.Rect(cx, ry, w/cols, h/rows)
+                pygame.draw.rect(surf, (40,45,50), shelf_rect, 1)
+                if random.random() > 0.2:
+                    box_w = random.randint(10, int(w/cols - 5))
+                    box_h = random.randint(5, int(h/rows - 5))
+                    box_x = cx + random.randint(2, int(w/cols - box_w - 2))
+                    box_y = ry + int(h/rows - box_h - 2)
+                    color = random.choice([BOX_COLOR_1, BOX_COLOR_2, (160, 110, 50)])
+                    pygame.draw.rect(surf, color, (box_x, box_y, box_w, box_h))
+    def _draw_pillar(self, surf, x, y, w, h):
+        pygame.draw.rect(surf, (90, 95, 100), (x+w, y, 10, h))
+        pygame.draw.rect(surf, (110, 115, 120), (x, y, w, h))
     def _recalculate_layout(self, node, x, y, level, width_spread):
         if node is None: return
-        node.target_x = x
-        node.target_y = y
+        node.target_x = x; node.target_y = y
         depth = self.logic.current_depth
-        total_height = SCREEN_HEIGHT - self.TOP_MARGIN - self.BOTTOM_MARGIN
-        level_height = total_height / max(1, depth + 1)
+        level_height = (SCREEN_HEIGHT - self.TOP_MARGIN - self.BOTTOM_MARGIN) / max(1, depth) if depth > 0 else 0
         next_spread = width_spread / 2
         self._recalculate_layout(node.left, x - next_spread, y + level_height, level + 1, next_spread)
         self._recalculate_layout(node.right, x + next_spread, y + level_height, level + 1, next_spread)
     def _update_node_positions(self, node):
         if node is None: return
-        dx = node.target_x - node.x
-        dy = node.target_y - node.y
+        dx = node.target_x - node.x; dy = node.target_y - node.y
         if abs(dx) > 0.1 or abs(dy) > 0.1:
-            node.x += dx * 0.1
-            node.y += dy * 0.1
+            node.x += dx * 0.1; node.y += dy * 0.1
         else:
             node.x, node.y = node.target_x, node.target_y
         if node.push_arm_timer > 0:
             node.push_arm_timer -= 1
             if node.push_arm_timer == 0:
                 node.push_arm_state = 'idle'
-        self._update_node_positions(node.left)
-        self._update_node_positions(node.right)
+        self._update_node_positions(node.left); self._update_node_positions(node.right)
     def draw_conveyor_line(self, start, end):
         dist = math.hypot(end[0]-start[0], end[1]-start[1])
         if dist == 0: return
-        angle = math.atan2(end[1]-start[1], end[0]-start[0])
-        perp_angle = angle + math.pi / 2
+        angle = math.atan2(end[1]-start[1], end[0]-start[0]); perp_angle = angle + math.pi / 2
         w = self.current_node_size * 0.4
         dx, dy = math.cos(perp_angle) * w/2, math.sin(perp_angle) * w/2
-        points = [
-            (start[0] - dx, start[1] - dy), (start[0] + dx, start[1] + dy),
-            (end[0] + dx, end[1] + dy), (end[0] - dx, end[1] - dy)
-        ]
+        points = [(start[0] - dx, start[1] - dy), (start[0] + dx, start[1] + dy),
+                  (end[0] + dx, end[1] + dy), (end[0] - dx, end[1] - dy)]
         pygame.draw.polygon(self.screen, (40,40,45), points)
         num_stripes = int(dist / 20)
         if num_stripes > 0:
             for i in range(num_stripes + 2):
                 t = (i - self.belt_offset / 20) / num_stripes
                 if 0 <= t <= 1:
-                    px1 = start[0] + (end[0]-start[0]) * t
-                    py1 = start[1] + (end[1]-start[1]) * t
+                    px1 = start[0] + (end[0]-start[0]) * t; py1 = start[1] + (end[1]-start[1]) * t
                     pygame.draw.line(self.screen, (60,60,65), (px1 - dx, py1 - dy), (px1 + dx, py1 + dy), 2)
         pygame.draw.line(self.screen, (90,95,100), points[0], points[3], 5)
         pygame.draw.line(self.screen, (90,95,100), points[1], points[2], 5)
     def draw_tree_nodes_and_labels(self, node):
         if node is None: return
         if node.left:
-            self.draw_conveyor_line((node.x, node.y), (node.left.x, node.left.y))
-            self.draw_tree_nodes_and_labels(node.left)
+            self.draw_conveyor_line((node.x, node.y), (node.left.x, node.left.y)); self.draw_tree_nodes_and_labels(node.left)
         if node.right:
-            self.draw_conveyor_line((node.x, node.y), (node.right.x, node.right.y))
-            self.draw_tree_nodes_and_labels(node.right)
-        s = int(self.current_node_size)
-        rect = pygame.Rect(0, 0, s, s)
-        rect.center = (node.x, node.y)
+            self.draw_conveyor_line((node.x, node.y), (node.right.x, node.right.y)); self.draw_tree_nodes_and_labels(node.right)
+        s = int(self.current_node_size); rect = pygame.Rect(0, 0, s, s); rect.center = (node.x, node.y)
         base_rect = rect.inflate(s*0.2, s*0.2)
         pygame.draw.rect(self.screen, (30,30,35), base_rect.move(3,3), border_radius=5)
         pygame.draw.rect(self.screen, (80,85,90), base_rect, border_radius=5)
-        arm_w, arm_h = s * 0.8, s * 0.2
-        arm_rect = pygame.Rect(0,0, arm_w, arm_h)
-        arm_rect.centery = base_rect.centery
-        if node.push_arm_state == 'left':
-            arm_rect.right = base_rect.centerx - 5
-        elif node.push_arm_state == 'right':
-            arm_rect.left = base_rect.centerx + 5
-        else:
-            arm_rect.centerx = base_rect.centerx
-        pygame.draw.rect(self.screen, (255, 200, 0), arm_rect)
-        pygame.draw.rect(self.screen, (180, 140, 0), arm_rect, 2)
+        arm_w, arm_h = s * 0.8, s * 0.2; arm_rect = pygame.Rect(0,0, arm_w, arm_h); arm_rect.centery = base_rect.centery
+        if node.push_arm_state == 'left': arm_rect.right = base_rect.centerx - 5
+        elif node.push_arm_state == 'right': arm_rect.left = base_rect.centerx + 5
+        else: arm_rect.centerx = base_rect.centerx
+        pygame.draw.rect(self.screen, (255, 200, 0), arm_rect); pygame.draw.rect(self.screen, (180, 140, 0), arm_rect, 2)
         pygame.draw.rect(self.screen, (150,155,160), rect, border_radius=3)
         if self.highlighted_node == node and self.highlight_timer > 0:
             pygame.draw.rect(self.screen, (255, 255, 0), base_rect, 3, border_radius=5)
-        font_size = max(14, int(s * 0.5))
-        font = pygame.font.SysFont("Impact", font_size)
+        font_size = max(14, int(s * 0.5)); font = pygame.font.SysFont("Impact", font_size)
         txt = font.render(str(node.value), True, (20, 20, 20))
         self.screen.blit(txt, (rect.centerx - txt.get_width()//2, rect.centery - txt.get_height()//2))
     def action_insert(self):
         if self.is_animating or self.is_traversing: return
         text = self.lcd.text
-        if not text.isdigit():
-            self.lcd.update_status("ERR: INTEGERS ONLY"); return
+        if not text.isdigit(): self.lcd.update_status("ERR: INTEGERS ONLY"); return
         val = int(text)
-        if val > 999:
-            self.lcd.update_status("ERR: MAX 999"); return
+        if val > 999: self.lcd.update_status("ERR: MAX 999"); return
         receipt = self.logic.insert(val)
-        if receipt['type'] == 'ERROR':
-            self.lcd.update_status(f"ERR: {receipt['message']}"); return
+        if receipt['type'] == 'ERROR': self.lcd.update_status(f"ERR: {receipt['message']}"); return
         self.lcd.update_status(f"ROUTING: {val}"); self.lcd.text = ""
         self.is_animating = True
         if receipt['type'] != 'ROOT':
             new_node = receipt['node']; parent = receipt['parent']
             new_node.x, new_node.y = parent.x, parent.y
         pkg = PackageSprite(self.ROOT_X, 40, val, size=self.current_node_size * 0.7)
-        self.all_sprites.add(pkg); self.packages_group.add(pkg)
+        self.packages_group.add(pkg)
         hopper_node = BSTNode(0); hopper_node.x = self.ROOT_X; hopper_node.y = self.TOP_MARGIN
         path_nodes = [hopper_node]
         if receipt['type'] != 'ROOT':
@@ -1962,8 +2914,8 @@ class RouterTreeSimulation:
         pkg.final_callback = self.on_animation_complete; pkg.add_path(path_nodes)
     def action_reset(self):
         if self.is_traversing: return
-        self.logic.clear(); self.all_sprites.empty(); self.packages_group.empty()
-        self.drone = DroneSprite(-50, -50); self.all_sprites.add(self.drone)
+        self.logic.clear(); self.packages_group.empty()
+        self.drone.move_to((-50, -50))
         self.is_animating = False; self.lcd.update_status("SYSTEM FLUSHED")
     def on_animation_complete(self):
         self.is_animating = False; self.lcd.update_status("READY")
@@ -1972,105 +2924,75 @@ class RouterTreeSimulation:
         self.show_traversal_menu = True
     def action_traverse(self, order_type):
         self.show_traversal_menu = False
-        path = []
-        title = ""
-        if order_type == "IN":
-            path = self.logic.in_order()
-            title = "IN-ORDER SCAN MANIFEST"
-        elif order_type == "PRE":
-            path = self.logic.pre_order()
-            title = "PRE-ORDER SCAN MANIFEST"
-        elif order_type == "POST":
-            path = self.logic.post_order()
-            title = "POST-ORDER SCAN MANIFEST"
+        path = []; title = ""
+        if order_type == "IN": path = self.logic.in_order(); title = "IN-ORDER SCAN MANIFEST"
+        elif order_type == "PRE": path = self.logic.pre_order(); title = "PRE-ORDER SCAN MANIFEST"
+        elif order_type == "POST": path = self.logic.post_order(); title = "POST-ORDER SCAN MANIFEST"
         self.traversal_path = path
-        self.pending_report_data = {
-            "title": title,
-            "path": " ".join([str(node.value) for node in path])
-        }
-        self.is_traversing = True
-        self.traversal_index = 0
+        self.pending_report_data = {"title": title, "path": " ".join([str(node.value) for node in path])}
+        self.is_traversing = True; self.traversal_index = 0
         self.drone.pos_x, self.drone.pos_y = self.ROOT_X, 20
-        self.lcd.update_status("SCANNING...")
-        self.process_next_traversal_step()
+        self.lcd.update_status("SCANNING..."); self.process_next_traversal_step()
     def process_next_traversal_step(self):
         if self.traversal_index >= len(self.traversal_path):
-            self.on_traversal_complete()
-            return
+            self.on_traversal_complete(); return
         node_to_visit = self.traversal_path[self.traversal_index]
         self.drone.move_to((node_to_visit.x, node_to_visit.y), callback=self.on_drone_arrival)
     def on_drone_arrival(self):
         node = self.traversal_path[self.traversal_index]
-        self.highlighted_node = node
-        self.highlight_timer = 20
-        self.traversal_index += 1
-        self.process_next_traversal_step()
+        self.highlighted_node = node; self.highlight_timer = 20
+        self.traversal_index += 1; self.process_next_traversal_step()
     def on_traversal_complete(self):
-        self.is_traversing = False
-        self.traversal_path = []
-        self.traversal_index = 0
-        self.drone.move_to((-50, -50))
-        self.lcd.update_status("SCAN COMPLETE")
-        self.traversal_result_data = self.pending_report_data
-        self.pending_report_data = None
+        self.is_traversing = False; self.traversal_path = []; self.traversal_index = 0
+        self.drone.move_to((-50, -50)); self.lcd.update_status("SCAN COMPLETE")
+        self.traversal_result_data = self.pending_report_data; self.pending_report_data = None
     def handle_events(self, event):
         if self.show_traversal_menu:
-            self.menu_btn_in.handle_event(event)
-            self.menu_btn_pre.handle_event(event)
-            self.menu_btn_post.handle_event(event)
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if not (self.menu_btn_in.is_hovered or self.menu_btn_pre.is_hovered or self.menu_btn_post.is_hovered):
-                    self.show_traversal_menu = False
+            self.menu_btn_in.handle_event(event); self.menu_btn_pre.handle_event(event); self.menu_btn_post.handle_event(event)
+            if event.type == pygame.MOUSEBUTTONDOWN and not (self.menu_btn_in.is_hovered or self.menu_btn_pre.is_hovered or self.menu_btn_post.is_hovered):
+                self.show_traversal_menu = False
             return
         if self.traversal_result_data and not self.is_traversing:
             if event.type == pygame.MOUSEBUTTONDOWN:
-                self.traversal_result_data = None
-                self.lcd.update_status("READY")
+                self.traversal_result_data = None; self.lcd.update_status("READY")
             return
-        self.lcd.handle_event(event)
-        self.btn_insert.handle_event(event)
-        self.btn_reset.handle_event(event)
-        self.btn_scan.handle_event(event)
+        self.lcd.handle_event(event); self.btn_insert.handle_event(event)
+        self.btn_reset.handle_event(event); self.btn_scan.handle_event(event)
     def update(self):
         if self.show_traversal_menu: return
         self.belt_offset = (self.belt_offset + 1) % 20
         if self.highlight_timer > 0:
             self.highlight_timer -= 1
-            if self.highlight_timer == 0:
-                self.highlighted_node = None
+            if self.highlight_timer == 0: self.highlighted_node = None
         depth = self.logic.current_depth
-        num_slots = 2 ** depth
-        slot_width = self.SIM_WIDTH / max(1, num_slots)
-        self.target_node_size = int(slot_width * 0.50)
-        if self.target_node_size > 80: self.target_node_size = 80
-        if self.target_node_size < 20: self.target_node_size = 20
-        size_diff = self.target_node_size - self.current_node_size
+        slot_width = self.SIM_WIDTH / max(1, 2 ** depth)
+        target_node_size = int(slot_width * 0.50)
+        if target_node_size > 80: target_node_size = 80
+        if target_node_size < 20: target_node_size = 20
+        size_diff = target_node_size - self.current_node_size
         if abs(size_diff) > 0.1: self.current_node_size += size_diff * 0.1
-        else: self.current_node_size = self.target_node_size
+        else: self.current_node_size = target_node_size
         initial_spread = self.SIM_WIDTH / 2
         self._recalculate_layout(self.logic.root, self.ROOT_X, self.TOP_MARGIN, 0, initial_spread)
         self._update_node_positions(self.logic.root)
-        current_pkg_size = self.current_node_size * 0.7
+        current_pkg_size = self.current_node_size * 0.8
         for pkg in self.packages_group:
             pkg.resize(current_pkg_size)
-        self.all_sprites.update()
+        self.drone.resize(self.current_node_size * 0.8)
+        self.packages_group.update()
+        self.drone_group.update()
         self.lcd.update()
     def draw_traversal_menu(self):
-        overlay = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))
+        overlay = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA); overlay.fill((0, 0, 0, 180))
         self.screen.blit(overlay, (0, 0))
         font_title = pygame.font.SysFont("Impact", 30)
         title_surf = font_title.render("SELECT TRAVERSAL METHOD", True, WHITE)
         self.screen.blit(title_surf, (self.SIM_WIDTH//2 - title_surf.get_width()//2, 180))
-        self.menu_btn_in.draw(self.screen)
-        self.menu_btn_pre.draw(self.screen)
-        self.menu_btn_post.draw(self.screen)
+        self.menu_btn_in.draw(self.screen); self.menu_btn_pre.draw(self.screen); self.menu_btn_post.draw(self.screen)
     def draw_traversal_result(self):
-        overlay = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))
+        overlay = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA); overlay.fill((0, 0, 0, 180))
         self.screen.blit(overlay, (0, 0))
-        w, h = 500, 220
-        x, y = (self.SIM_WIDTH - w) // 2, (SCREEN_HEIGHT - h) // 2
+        w, h = 500, 220; x, y = (self.SIM_WIDTH - w) // 2, (SCREEN_HEIGHT - h) // 2
         pygame.draw.rect(self.screen, (0,0,0,80), (x+5, y+5, w, h), border_radius=3)
         pygame.draw.rect(self.screen, (230, 230, 220), (x, y, w, h), border_radius=3)
         pygame.draw.rect(self.screen, (100,100,100), (x,y,w,h), 1, border_radius=3)
@@ -2078,31 +3000,28 @@ class RouterTreeSimulation:
         header_surf = font_header.render(self.traversal_result_data["title"], True, (30,30,30))
         self.screen.blit(header_surf, (x + w//2 - header_surf.get_width()//2, y + 20))
         pygame.draw.line(self.screen, (180,180,170), (x+20, y+50), (x+w-20, y+50), 1)
-        font_result = pygame.font.SysFont("Courier New", 24, bold=True)
+        font_result = pygame.font.SysFont("Consolas", 24, bold=True)
         words = self.traversal_result_data["path"].split(' ')
-        lines = []
-        current_line = ""
+        lines = []; current_line = ""
         for word in words:
             test_line = current_line + word + " "
             if font_result.size(test_line)[0] < w - 40:
                 current_line = test_line
             else:
-                lines.append(current_line)
-                current_line = word + " "
+                lines.append(current_line); current_line = word + " "
         lines.append(current_line)
-        line_y = y + 70
+        line_y = y + 80
         for line in lines:
-            result_surf = font_result.render(line, True, (40, 40, 40))
-            self.screen.blit(result_surf, (x + 20, line_y))
-            line_y += 30
+            result_surf = font_result.render(line, True, (20, 20, 20))
+            self.screen.blit(result_surf, (x + 20, line_y)); line_y += 30
         if not self.is_traversing:
             font_prompt = pygame.font.SysFont("Arial", 12)
-            prompt_surf = font_prompt.render("Click anywhere to dismiss", True, (150, 150, 150))
+            prompt_surf = font_prompt.render("Click anywhere to dismiss", True, (100, 100, 100))
             self.screen.blit(prompt_surf, (x + w - prompt_surf.get_width() - 10, y + h - prompt_surf.get_height() - 10))
     def draw(self):
         self.screen.blit(self.bg_surface, (0, 0))
         self.draw_tree_nodes_and_labels(self.logic.root)
-        self.all_sprites.draw(self.screen)
+        self.packages_group.draw(self.screen)
         for pkg in self.packages_group:
             font_size = max(12, int(pkg.current_size * 0.5))
             font = pygame.font.SysFont("Arial", font_size, bold=True)
@@ -2110,15 +3029,934 @@ class RouterTreeSimulation:
             self.screen.blit(shadow, (pkg.rect.centerx - shadow.get_width()//2 + 1, pkg.rect.centery - shadow.get_height()//2 + 1))
             label = font.render(str(pkg.value), True, (255, 255, 255))
             self.screen.blit(label, (pkg.rect.centerx - label.get_width()//2, pkg.rect.centery - label.get_height()//2))
+        self.drone_group.draw(self.screen)
+        self.chassis.draw(self.screen); self.lcd.draw(self.screen)
+        self.btn_insert.draw(self.screen); self.btn_reset.draw(self.screen); self.btn_scan.draw(self.screen)
+        if self.show_traversal_menu: self.draw_traversal_menu()
+        elif self.traversal_result_data: self.draw_traversal_result()
+</file>
+
+<file path="Full_Stack_Sim/simulation/site_sorting_floor.py/site_sorting_floor.py">
+import pygame
+import random
+from settings import *
+from core.ui import HandheldChassis, LCDDisplay, RoundButton, Button
+class SortingManager:
+    def __init__(self):
+        self.items = []
+    def generate_new_list(self, size=20):
+        self.size = size
+        self.items = random.sample(range(10, 100), self.size)
+    def get_bubble_sort_steps(self):
+        steps = []
+        items = list(self.items)
+        n = len(items)
+        for i in range(n):
+            swapped = False
+            for j in range(0, n - i - 1):
+                steps.append({"type": "compare", "indices": (j, j + 1)})
+                if items[j] > items[j + 1]:
+                    items[j], items[j + 1] = items[j + 1], items[j]
+                    swapped = True
+                    steps.append({"type": "swap", "indices": (j, j + 1)})
+            steps.append({"type": "lock", "index": n - 1 - i})
+            if not swapped:
+                for k in range(0, n - i - 1):
+                    steps.append({"type": "lock", "index": k})
+                break
+        return steps
+    def get_selection_sort_steps(self):
+        steps = []
+        items = list(self.items)
+        n = len(items)
+        for i in range(n):
+            min_idx = i
+            steps.append({"type": "highlight", "indices": [i]})
+            for j in range(i + 1, n):
+                steps.append({"type": "compare", "indices": (min_idx, j)})
+                if items[j] < items[min_idx]:
+                    min_idx = j
+                    steps.append({"type": "highlight", "indices": [min_idx]})
+            if min_idx != i:
+                items[i], items[min_idx] = items[min_idx], items[i]
+                steps.append({"type": "swap", "indices": (i, min_idx)})
+            steps.append({"type": "lock", "index": i})
+        return steps
+    def get_insertion_sort_steps(self):
+        steps = []
+        items = list(self.items)
+        n = len(items)
+        if n > 0:
+            steps.append({"type": "lock", "index": 0})
+        for i in range(1, n):
+            key = items[i]
+            j = i - 1
+            steps.append({"type": "highlight", "indices": [i]})
+            while j >= 0 and key < items[j]:
+                steps.append({"type": "compare", "indices": (j, i if j == i-1 else j+1)})
+                items[j + 1] = items[j]
+                steps.append({"type": "swap", "indices": (j, j + 1)})
+                j -= 1
+            items[j + 1] = key
+            steps.append({"type": "lock", "index": i})
+        steps.append({"type": "lock_all"})
+        return steps
+    def get_merge_sort_steps(self):
+        steps = []
+        items = list(self.items)
+        def merge_sort_recursive(arr, start, end):
+            if start < end:
+                mid = (start + end) // 2
+                merge_sort_recursive(arr, start, mid)
+                merge_sort_recursive(arr, mid + 1, end)
+                steps.append({"type": "highlight", "indices": list(range(start, end + 1))})
+                left = arr[start:mid+1]
+                right = arr[mid+1:end+1]
+                i = j = 0; k = start
+                while i < len(left) and j < len(right):
+                    if left[i] <= right[j]: arr[k] = left[i]; i += 1
+                    else: arr[k] = right[j]; j += 1
+                    k += 1
+                while i < len(left): arr[k] = left[i]; i += 1; k += 1
+                while j < len(right): arr[k] = right[j]; j += 1; k += 1
+                new_order_slice = arr[start:end+1]
+                steps.append({"type": "reorder", "indices": list(range(start, end + 1)), "values": new_order_slice})
+        merge_sort_recursive(items, 0, len(items) - 1)
+        steps.append({"type": "lock_all"})
+        return steps
+    def get_quick_sort_steps(self):
+        steps = []
+        items = list(self.items)
+        def partition(arr, low, high):
+            pivot = arr[high]; i = low - 1
+            steps.append({"type": "set_pivot", "index": high})
+            for j in range(low, high):
+                steps.append({"type": "compare", "indices": (j, high)})
+                if arr[j] < pivot:
+                    i += 1
+                    arr[i], arr[j] = arr[j], arr[i]
+                    if i != j: steps.append({"type": "swap", "indices": (i, j)})
+            arr[i + 1], arr[high] = arr[high], arr[i + 1]
+            if (i + 1) != high: steps.append({"type": "swap", "indices": (i + 1, high)})
+            steps.append({"type": "lock", "index": i + 1})
+            return i + 1
+        def quick_sort_recursive(arr, low, high):
+            if low < high:
+                pi = partition(arr, low, high)
+                quick_sort_recursive(arr, low, pi - 1)
+                quick_sort_recursive(arr, pi + 1, high)
+        quick_sort_recursive(items, 0, len(items) - 1)
+        steps.append({"type": "lock_all"})
+        return steps
+class ContainerSprite(pygame.sprite.Sprite):
+    def __init__(self, value, x, y, container_width, max_value):
+        super().__init__()
+        self.value = value
+        self.pos_x, self.pos_y = float(x), float(y)
+        self.target_x, self.target_y = float(x), float(y)
+        self.is_moving = False
+        self.on_finish_callback = None
+        self.state = 'idle'
+        self.width = int(container_width)
+        self.height = int((value / max_value) * 200) + 50
+        self.color_palette = [CONTAINER_BLUE, CONTAINER_RED, (180, 120, 40), (80, 80, 80)]
+        self.base_color = random.choice(self.color_palette)
+        self.image = self._create_surface()
+        self.rect = self.image.get_rect(bottomleft=(x, y))
+    def _create_surface(self):
+        glow_padding = 15
+        surf = pygame.Surface((self.width + glow_padding * 2, self.height + glow_padding * 2), pygame.SRCALPHA)
+        self.container_body_rect = pygame.Rect(glow_padding, glow_padding, self.width, self.height)
+        glow_color_map = {'comparing': (255, 80, 80), 'highlight': (255, 255, 100), 'pivot': (220, 100, 255)}
+        if self.state in glow_color_map:
+            glow_color = glow_color_map[self.state]
+            for i in range(glow_padding // 2, 0, -1):
+                glow_rect = self.container_body_rect.inflate(i * 2, i * 2)
+                alpha = 120 - (i * 10)
+                pygame.draw.rect(surf, (*glow_color, alpha), glow_rect, border_radius=i * 2)
+        if self.state == 'sorted':
+            main_color = CONTAINER_GREEN
+            dark_color = (main_color[0] * 0.7, main_color[1] * 0.7, main_color[2] * 0.7)
+        else:
+            main_color = self.base_color
+            dark_color = (main_color[0] * 0.7, main_color[1] * 0.7, main_color[2] * 0.7)
+        pygame.draw.rect(surf, main_color, self.container_body_rect)
+        for i in range(0, self.width, 6):
+            pygame.draw.line(surf, dark_color, (self.container_body_rect.left + i, self.container_body_rect.top), (self.container_body_rect.left + i, self.container_body_rect.bottom), 1)
+        pygame.draw.line(surf, (255,255,255,60), self.container_body_rect.topleft, self.container_body_rect.topright, 2)
+        pygame.draw.rect(surf, (20, 20, 20), self.container_body_rect, 2)
+        return surf
+    def set_state(self, new_state):
+        if self.state != new_state:
+            self.state = new_state
+            self.image = self._create_surface()
+    def move_to(self, target_pos, callback=None):
+        self.target_x, self.target_y = target_pos
+        self.is_moving = True
+        self.on_finish_callback = callback
+    def update(self, speed_multiplier=1.0):
+        if not self.is_moving: return
+        dx = self.target_x - self.pos_x; dy = self.target_y - self.pos_y
+        effective_lerp = LERP_FACTOR * speed_multiplier
+        effective_speed = MIN_SPEED * speed_multiplier
+        if (dx**2 + dy**2) < effective_speed**2:
+            self.pos_x, self.pos_y = self.target_x, self.target_y
+            self.is_moving = False
+            if self.on_finish_callback:
+                cb = self.on_finish_callback; self.on_finish_callback = None; cb()
+        else:
+            self.pos_x += dx * effective_lerp; self.pos_y += dy * effective_lerp
+        self.rect.bottomleft = (int(self.pos_x), int(self.pos_y))
+class GantryCraneSprite(pygame.sprite.Sprite):
+    def __init__(self, y_pos, rail_width):
+        super().__init__()
+        self.y_pos = y_pos
+        self.rail_width = rail_width
+        self.pos_x = rail_width / 2
+        self.target_x = self.pos_x
+        self.is_moving = False
+        self.on_finish_callback = None
+        self.image = self._create_surface()
+        self.rect = self.image.get_rect(center=(self.pos_x, self.y_pos))
+    def _create_surface(self):
+        surf = pygame.Surface((120, 150), pygame.SRCALPHA)
+        center_x = surf.get_width() // 2
+        pygame.draw.line(surf, (30,30,30), (center_x - 15, 0), (center_x - 15, 100), 2)
+        pygame.draw.line(surf, (30,30,30), (center_x + 15, 0), (center_x + 15, 100), 2)
+        hoist_body = pygame.Rect(center_x - 30, 100, 60, 20)
+        pygame.draw.rect(surf, (80, 85, 90), hoist_body)
+        pygame.draw.rect(surf, (50, 55, 60), hoist_body, 2)
+        pygame.draw.rect(surf, (60, 65, 70), (center_x - 25, 120, 50, 10))
+        pygame.draw.polygon(surf, STRIPE_YELLOW, [(center_x - 25, 130), (center_x - 15, 140), (center_x - 5, 130)])
+        pygame.draw.polygon(surf, STRIPE_YELLOW, [(center_x + 25, 130), (center_x + 15, 140), (center_x + 5, 130)])
+        trolley_rect = pygame.Rect(0, 0, 120, 30)
+        pygame.draw.rect(surf, (60, 65, 70), trolley_rect, border_radius=3)
+        pygame.draw.rect(surf, (90, 95, 100), trolley_rect, 2, border_radius=3)
+        pygame.draw.circle(surf, (40,40,40), (15, 15), 5)
+        pygame.draw.circle(surf, (40,40,40), (105, 15), 5)
+        return surf
+    def move_to(self, target_x, callback=None):
+        self.target_x = target_x
+        self.is_moving = True
+        self.on_finish_callback = callback
+    def update(self, speed_multiplier=1.0):
+        if not self.is_moving: return
+        dx = self.target_x - self.pos_x
+        effective_lerp = LERP_FACTOR * speed_multiplier
+        effective_speed = MIN_SPEED * speed_multiplier
+        if abs(dx) < effective_speed:
+            self.pos_x = self.target_x
+            self.is_moving = False
+            if self.on_finish_callback:
+                cb = self.on_finish_callback; self.on_finish_callback = None; cb()
+        else:
+            self.pos_x += dx * effective_lerp
+        self.rect.centerx = int(self.pos_x)
+class SortingSimulation:
+    def __init__(self, screen):
+        self.screen = screen
+        self.logic = SortingManager()
+        self.SIM_WIDTH = 750
+        self.FLOOR_Y = SCREEN_HEIGHT - 80
+        self.STAGING_Y = self.FLOOR_Y - 350
+        self.all_sprites = pygame.sprite.Group()
+        self.containers = pygame.sprite.Group()
+        self.crane_group = pygame.sprite.Group()
+        self.ui_x = 750; self.ui_w = 250
+        self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
+        self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
+        self.lcd.update_status("SORTING FLOOR")
+        btn_cx = self.ui_x + self.ui_w // 2
+        self.btn_load = RoundButton(btn_cx, 280, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "LOAD", self.action_load_containers)
+        self.btn_sort = RoundButton(btn_cx, 390, 45, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "SORT", self.action_open_sort_menu)
+        self.btn_reset = RoundButton(btn_cx, 500, 45, BTN_RED_BASE, BTN_RED_LIGHT, "RESET", self.action_reset)
+        self.speed_levels = [0.5, 1.0, 2.0, 4.0, 8.0]
+        self.speed_index = 1
+        self.speed_multiplier = self.speed_levels[self.speed_index]
+        speed_btn_y = self.chassis.rect.bottom - 60
+        speed_btn_w = 80; speed_btn_h = 30
+        self.btn_speed_down = Button(btn_cx - speed_btn_w - 5, speed_btn_y, speed_btn_w, speed_btn_h, "Speed -", self.decrease_speed)
+        self.btn_speed_up = Button(btn_cx + 5, speed_btn_y, speed_btn_w, speed_btn_h, "Speed +", self.increase_speed)
+        self.is_sorting = False
+        self.sort_steps = []
+        self.visual_containers = []
+        self.slot_positions = []
+        self.gantry_crane = GantryCraneSprite(y_pos=180, rail_width=self.SIM_WIDTH)
+        self.crane_group.add(self.gantry_crane)
+        self.all_sprites.add(self.gantry_crane)
+        self.background = self._generate_static_background()
+        self.show_sort_menu = False
+        self._init_sort_menu()
+        self.action_load_containers()
+    def _init_sort_menu(self):
+        menu_btn_w, menu_btn_h = 220, 40; menu_cx = self.SIM_WIDTH // 2; start_y = 200
+        self.menu_btn_bubble = Button(menu_cx - menu_btn_w//2, start_y, menu_btn_w, menu_btn_h, "Bubble Sort", lambda: self.action_begin_sort("bubble"))
+        self.menu_btn_selection = Button(menu_cx - menu_btn_w//2, start_y + 50, menu_btn_w, menu_btn_h, "Selection Sort", lambda: self.action_begin_sort("selection"))
+        self.menu_btn_insertion = Button(menu_cx - menu_btn_w//2, start_y + 100, menu_btn_w, menu_btn_h, "Insertion Sort", lambda: self.action_begin_sort("insertion"))
+        self.menu_btn_merge = Button(menu_cx - menu_btn_w//2, start_y + 150, menu_btn_w, menu_btn_h, "Merge Sort", lambda: self.action_begin_sort("merge"))
+        self.menu_btn_quick = Button(menu_cx - menu_btn_w//2, start_y + 200, menu_btn_w, menu_btn_h, "Quick Sort", lambda: self.action_begin_sort("quick"))
+        self.sort_menu_buttons = [self.menu_btn_bubble, self.menu_btn_selection, self.menu_btn_insertion, self.menu_btn_merge, self.menu_btn_quick]
+    def _draw_shelf_unit(self, surf, x, y, w, h, rows, cols):
+        for r in range(rows):
+            ry = y + r * (h/rows)
+            for c in range(cols):
+                cx = x + c * (w/cols)
+                shelf_rect = pygame.Rect(cx, ry, w/cols, h/rows)
+                pygame.draw.rect(surf, (40,45,50), shelf_rect, 1)
+                if random.random() > 0.2:
+                    box_w = random.randint(10, int(w/cols - 5)); box_h = random.randint(5, int(h/rows - 5))
+                    box_x = cx + random.randint(2, int(w/cols - box_w - 2)); box_y = ry + int(h/rows - box_h - 2)
+                    color = random.choice([BOX_COLOR_1, BOX_COLOR_2, (160, 110, 50)])
+                    pygame.draw.rect(surf, color, (box_x, box_y, box_w, box_h))
+    def _draw_pillar(self, surf, x, y, w, h):
+        pygame.draw.rect(surf, (90, 95, 100), (x+w, y, 10, h))
+        pygame.draw.rect(surf, (110, 115, 120), (x, y, w, h))
+    def _generate_static_background(self):
+        bg = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        bg.fill(WALL_BASE_COLOR)
+        self._draw_shelf_unit(bg, 0, 100, SCREEN_WIDTH, SCREEN_HEIGHT/2, 8, 25)
+        for i in range(7):
+            self._draw_pillar(bg, 50 + i * 150, 0, 20, SCREEN_HEIGHT)
+        floor_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT - self.FLOOR_Y))
+        floor_surf.fill(FLOOR_COLOR)
+        for _ in range(8000):
+            color = random.choice([CONCRETE_NOISE_1, CONCRETE_NOISE_2])
+            floor_surf.set_at((random.randint(0, SCREEN_WIDTH - 1), random.randint(0, floor_surf.get_height() - 1)), color)
+        bg.blit(floor_surf, (0, self.FLOOR_Y))
+        pygame.draw.rect(bg, (30,30,30), (0, self.FLOOR_Y, SCREEN_WIDTH, 5))
+        pygame.draw.line(bg, STRIPE_YELLOW, (0, self.FLOOR_Y + 10), (SCREEN_WIDTH, self.FLOOR_Y + 10), 3)
+        pygame.draw.rect(bg, (40,45,50), (0,0,SCREEN_WIDTH, 80))
+        light_fixtures = []
+        for i in range(0, SCREEN_WIDTH, 150):
+            pygame.draw.rect(bg, (20,22,25), (i, 30, 100, 10)); pygame.draw.rect(bg, FLUORESCENT_LIGHT, (i+2, 32, 96, 6))
+            light_fixtures.append((i+50, 40))
+        rail_y = self.gantry_crane.y_pos - 30
+        pygame.draw.rect(bg, (50, 55, 60), (0, rail_y, SCREEN_WIDTH, 25)); pygame.draw.rect(bg, (80, 85, 90), (0, rail_y, SCREEN_WIDTH, 25), 2)
+        light_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        for lx, ly in light_fixtures:
+            points = [(lx - 30, ly), (lx + 30, ly), (lx + 100, SCREEN_HEIGHT), (lx - 100, SCREEN_HEIGHT)]
+            pygame.draw.polygon(light_layer, LIGHT_RAY_COLOR, points)
+        bg.blit(light_layer, (0,0))
+        return bg
+    def action_load_containers(self):
+        if self.is_sorting: return
+        size_text = self.lcd.text if self.lcd.text else "20"
+        try:
+            size = int(size_text)
+            if not 10 <= size <= 30: self.lcd.update_status("ERR: SIZE 10-30"); return
+        except ValueError: self.lcd.update_status("ERR: NOT A NUMBER"); return
+        self.lcd.update_status("LOADING CARGO...")
+        self.logic.generate_new_list(size=size)
+        for c in self.containers: c.kill()
+        self.visual_containers.clear()
+        self.slot_positions.clear()
+        container_width = (self.SIM_WIDTH - 100) / self.logic.size
+        start_x = 50
+        for i, value in enumerate(self.logic.items):
+            x = start_x + (i * container_width)
+            self.slot_positions.append(x)
+            c = ContainerSprite(value, x, self.FLOOR_Y, container_width - 4, 100)
+            self.containers.add(c); self.all_sprites.add(c); self.visual_containers.append(c)
+        self.lcd.update_status("READY TO SORT")
+    def action_open_sort_menu(self):
+        if self.is_sorting or not self.visual_containers: return
+        self.show_sort_menu = True
+    def action_begin_sort(self, sort_type):
+        self.show_sort_menu = False
+        if self.is_sorting: return
+        self.is_sorting = True
+        self.lcd.update_status(f"SORTING: {sort_type.upper()}")
+        st_map = {"bubble": self.logic.get_bubble_sort_steps, "selection": self.logic.get_selection_sort_steps,
+                  "insertion": self.logic.get_insertion_sort_steps, "merge": self.logic.get_merge_sort_steps,
+                  "quick": self.logic.get_quick_sort_steps}
+        self.sort_steps = st_map[sort_type]()
+        self.process_next_step()
+    def action_reset(self):
+        for sprite in self.all_sprites:
+            sprite.is_moving = False; sprite.on_finish_callback = None
+        self.is_sorting = False; self.sort_steps.clear(); self.show_sort_menu = False
+        self.lcd.update_status("SYSTEM RESET"); self.action_load_containers()
+    def increase_speed(self):
+        if self.speed_index < len(self.speed_levels) - 1:
+            self.speed_index += 1; self.speed_multiplier = self.speed_levels[self.speed_index]
+            self.lcd.update_status(f"SPEED: {self.speed_multiplier}x")
+    def decrease_speed(self):
+        if self.speed_index > 0:
+            self.speed_index -= 1; self.speed_multiplier = self.speed_levels[self.speed_index]
+            self.lcd.update_status(f"SPEED: {self.speed_multiplier}x")
+    def reset_container_states(self):
+        for c in self.visual_containers:
+            if c.state != 'sorted': c.set_state('idle')
+    def on_reorder_complete(self, indices, values):
+        value_map = {c.value: c for c in self.visual_containers}
+        reordered_visual_slice = [value_map[v] for v in values]
+        start, end = indices[0], indices[-1]
+        self.visual_containers[start : end + 1] = reordered_visual_slice
+        self.process_next_step()
+    def process_next_step(self):
+        if not self.sort_steps or not self.is_sorting:
+            self.is_sorting = False; self.lcd.update_status("SORT COMPLETE"); self.reset_container_states(); return
+        step = self.sort_steps.pop(0)
+        self.reset_container_states()
+        step_type = step.get("type")
+        if step_type == "compare":
+            idx1, idx2 = step["indices"]; c1, c2 = self.visual_containers[idx1], self.visual_containers[idx2]
+            c1.set_state('comparing'); c2.set_state('comparing')
+            target_crane_x = (c1.rect.centerx + c2.rect.centerx) / 2
+            self.gantry_crane.move_to(target_crane_x, self.process_next_step)
+        elif step_type == "swap":
+            idx1, idx2 = step["indices"]; c1, c2 = self.visual_containers[idx1], self.visual_containers[idx2]
+            self.visual_containers[idx1], self.visual_containers[idx2] = c2, c1
+            pos1_x, pos2_x = self.slot_positions[idx1], self.slot_positions[idx2]
+            c1.move_to((pos2_x, c1.pos_y)); c2.move_to((pos1_x, c2.pos_y), self.process_next_step)
+        elif step_type in ["lock", "set_pivot", "highlight"]:
+            state = {"lock": "sorted", "set_pivot": "pivot", "highlight": "highlight"}[step_type]
+            for idx in step.get("indices", [step.get("index")]):
+                if 0 <= idx < len(self.visual_containers): self.visual_containers[idx].set_state(state)
+            self.process_next_step()
+        elif step_type == "reorder":
+            indices, values = step["indices"], step["values"]
+            value_map = {c.value: c for c in self.visual_containers}
+            callback = lambda: self.on_reorder_complete(indices, values)
+            for i, idx in enumerate(indices):
+                cb = callback if i == len(indices) - 1 else None
+                target_x = self.slot_positions[idx]
+                sprite_to_move = value_map[values[i]]
+                sprite_to_move.move_to((target_x, self.FLOOR_Y), cb)
+        elif step_type == "lock_all":
+            for c in self.visual_containers: c.set_state('sorted')
+            self.process_next_step()
+    def handle_events(self, event):
+        if self.show_sort_menu:
+            for btn in self.sort_menu_buttons: btn.handle_event(event)
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if not any(btn.rect.collidepoint(event.pos) for btn in self.sort_menu_buttons):
+                    self.show_sort_menu = False
+            return
+        self.lcd.handle_event(event); self.btn_reset.handle_event(event)
+        self.btn_speed_up.handle_event(event); self.btn_speed_down.handle_event(event)
+        if not self.is_sorting:
+            self.btn_load.handle_event(event); self.btn_sort.handle_event(event)
+    def update(self):
+        if self.show_sort_menu: return
+        self.all_sprites.update(self.speed_multiplier)
+        self.lcd.update()
+    def draw_sort_menu(self):
+        overlay = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+        font_title = pygame.font.SysFont("Impact", 30)
+        title_surf = font_title.render("SELECT SORTING ALGORITHM", True, WHITE)
+        self.screen.blit(title_surf, (self.SIM_WIDTH//2 - title_surf.get_width()//2, 140))
+        for btn in self.sort_menu_buttons: btn.draw(self.screen)
+    def draw(self):
+        self.screen.blit(self.background, (0, 0))
+        self.all_sprites.draw(self.screen)
+        font = pygame.font.SysFont("Arial", 10, bold=True)
+        for container in self.containers:
+            text_surf = font.render(str(container.value), True, BLACK)
+            padding = 3
+            label_size = (text_surf.get_width() + padding * 2, text_surf.get_height() + padding * 2)
+            label_surf = pygame.Surface(label_size); label_surf.fill(WHITE)
+            pygame.draw.rect(label_surf, BLACK, label_surf.get_rect(), 1)
+            label_surf.blit(text_surf, (padding, padding))
+            visible_body_rect = pygame.Rect(
+                container.rect.left + container.container_body_rect.left,
+                container.rect.top + container.container_body_rect.top,
+                container.container_body_rect.width,
+                container.container_body_rect.height)
+            label_rect = label_surf.get_rect(midbottom=visible_body_rect.midtop, y=visible_body_rect.top - 15)
+            self.screen.blit(label_surf, label_rect)
+        self.chassis.draw(self.screen); self.lcd.draw(self.screen)
+        self.btn_load.draw(self.screen); self.btn_sort.draw(self.screen); self.btn_reset.draw(self.screen)
+        self.btn_speed_up.draw(self.screen); self.btn_speed_down.draw(self.screen)
+        if self.show_sort_menu: self.draw_sort_menu()
+</file>
+
+<file path="Full_Stack_Sim/simulation/site_warehouse_array.py/site_warehouse_array.py">
+import pygame
+import random
+import math
+from settings import *
+from core.ui import HandheldChassis, LCDDisplay, RoundButton, Button
+class ArrayManager:
+    def __init__(self, capacity=10):
+        self.resize(capacity)
+    def resize(self, capacity):
+        self.capacity = capacity
+        self.data = [None] * capacity
+    def write(self, index, value):
+        if index < 0 or index >= self.capacity: return {"type": "ERROR", "message": "INDEX OOB"}
+        old_value = self.data[index]
+        self.data[index] = value
+        return {"type": "WRITE", "index": index, "value": value, "replaced": old_value is not None}
+    def read(self, index):
+        if index < 0 or index >= self.capacity: return {"type": "ERROR", "message": "INDEX OOB"}
+        value = self.data[index]
+        if value is None: return {"type": "EMPTY", "index": index, "message": "SLOT EMPTY"}
+        return {"type": "READ", "index": index, "value": value}
+    def clear_slot(self, index):
+        if index < 0 or index >= self.capacity: return {"type": "ERROR", "message": "INDEX OOB"}
+        if self.data[index] is None: return {"type": "ERROR", "message": "ALREADY EMPTY"}
+        value = self.data[index]
+        self.data[index] = None
+        return {"type": "CLEAR", "index": index, "value": value}
+    def get_manifest(self):
+        return [{"index": i, "value": v} for i, v in enumerate(self.data)]
+class PalletCrateSprite(pygame.sprite.Sprite):
+    def __init__(self, x, y, value):
+        super().__init__()
+        self.value = str(value)
+        self.width = 40
+        self.height = 40
+        self.image = self._create_surface()
+        self.rect = self.image.get_rect(midbottom=(x, y))
+    def _create_surface(self):
+        surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        pallet_h = 6
+        box_h = self.height - pallet_h
+        pallet_color = (139, 105, 70)
+        dark_wood = (100, 70, 40)
+        pygame.draw.rect(surf, pallet_color, (0, self.height-pallet_h, self.width, pallet_h))
+        for i in range(0, self.width, 4):
+            pygame.draw.line(surf, dark_wood, (i, self.height-pallet_h), (i, self.height), 1)
+        pygame.draw.rect(surf, (20, 20, 20), (0, self.height - pallet_h//2 - 1, self.width, 2))
+        pygame.draw.rect(surf, pallet_color, (0, self.height-pallet_h, 4, pallet_h))
+        pygame.draw.rect(surf, pallet_color, (self.width//2-2, self.height-pallet_h, 4, pallet_h))
+        pygame.draw.rect(surf, pallet_color, (self.width-4, self.height-pallet_h, 4, pallet_h))
+        box_rect = pygame.Rect(2, 0, self.width-4, box_h)
+        pygame.draw.rect(surf, BOX_COLOR_1, box_rect)
+        pygame.draw.rect(surf, (160, 110, 60), box_rect, 1)
+        for i in range(box_rect.left + 4, box_rect.right, 4):
+            pygame.draw.line(surf, (190, 125, 60), (i, box_rect.top), (i, box_rect.bottom), 1)
+        tape_y = int(box_h * 0.25)
+        pygame.draw.line(surf, BOX_TAPE, (2, tape_y), (self.width-2, tape_y), 4)
+        label_w = self.width * 0.6
+        label_h = box_h * 0.4
+        label_x = (self.width - label_w) // 2
+        label_y = (box_h - label_h) // 2 + 5
+        pygame.draw.rect(surf, (240, 240, 240), (label_x, label_y, label_w, label_h))
+        font = pygame.font.SysFont("Arial", 12, bold=True)
+        txt = font.render(self.value, True, (20, 20, 20))
+        surf.blit(txt, (self.width//2 - txt.get_width()//2, label_y + label_h//2 - txt.get_height()//2))
+        pygame.draw.polygon(surf, (200, 50, 50), [
+            (self.width - 8, 4), (self.width - 5, 8), (self.width - 11, 8)
+        ])
+        return surf
+class ForkliftSprite(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        self.home_x, self.home_y = float(x), float(y)
+        self.pos_x, self.pos_y = self.home_x, self.home_y
+        self.target_x = self.home_x
+        self.is_moving = False
+        self.state = 'IDLE'
+        self.callback = None
+        self.cargo_sprite = None
+        self.fork_height = 0
+        self.max_fork_height = 180
+        self.width = 70
+        self.height = 50
+        self.facing_right = True
+        self.original_image_right = self._create_surface(facing_right=True)
+        self.original_image_left = self._create_surface(facing_right=False)
+        self.image = self.original_image_right
+        self.rect = self.image.get_rect(bottomleft=(int(self.pos_x), int(self.pos_y)))
+    def _create_surface(self, facing_right):
+        surf = pygame.Surface((self.width + 50, self.height + self.max_fork_height + 20), pygame.SRCALPHA)
+        floor_y = surf.get_height() - 10
+        direction = 1 if facing_right else -1
+        body_x_start = 0 if facing_right else 40
+        tire_radius = 14
+        rear_tire_x = body_x_start + 15 if facing_right else body_x_start + self.width - 15
+        front_tire_x = body_x_start + self.width - 15 if facing_right else body_x_start + 15
+        for tx in [rear_tire_x, front_tire_x]:
+            pygame.draw.circle(surf, (20, 20, 20), (tx, floor_y), tire_radius)
+            pygame.draw.circle(surf, (50, 50, 50), (tx, floor_y), 6)
+            for i in range(0, 360, 45):
+                rad = math.radians(i)
+                ox = tx + math.cos(rad) * (tire_radius - 2)
+                oy = floor_y + math.sin(rad) * (tire_radius - 2)
+                pygame.draw.circle(surf, (40, 40, 40), (int(ox), int(oy)), 2)
+        chassis_h = 35
+        chassis_rect = pygame.Rect(body_x_start, floor_y - chassis_h, self.width, chassis_h - 5)
+        pygame.draw.rect(surf, (255, 200, 0), chassis_rect, border_radius=6)
+        pygame.draw.rect(surf, (200, 150, 0), chassis_rect, 2, border_radius=6)
+        pygame.draw.rect(surf, (30, 30, 30), (body_x_start, floor_y - 15, self.width, 10))
+        vent_x = body_x_start + 10 if facing_right else body_x_start + self.width - 25
+        for i in range(3):
+            pygame.draw.line(surf, (50, 50, 50), (vent_x + i*5, floor_y - 25), (vent_x + i*5, floor_y - 18), 2)
+        cab_w = 35
+        cab_h = 45
+        cab_x = body_x_start + 10 if facing_right else body_x_start + self.width - 10 - cab_w
+        cab_rect = pygame.Rect(cab_x, floor_y - chassis_h - cab_h + 5, cab_w, cab_h)
+        pygame.draw.rect(surf, (40, 40, 45), cab_rect, 3, border_radius=2)
+        pygame.draw.rect(surf, (40, 40, 45), (cab_x - 2, cab_rect.top, cab_w + 4, 4))
+        seat_x = cab_x + 5 if facing_right else cab_x + cab_w - 15
+        pygame.draw.rect(surf, (60, 60, 60), (seat_x, floor_y - chassis_h - 10, 10, 15))
+        pygame.draw.circle(surf, (255, 100, 0), (cab_x + cab_w//2, cab_rect.top - 2), 3)
+        mast_x = body_x_start + self.width if facing_right else body_x_start
+        mast_w = 8
+        mast_h = self.height + self.max_fork_height - 20
+        mast_rect = pygame.Rect(mast_x - 4, floor_y - mast_h, mast_w, mast_h)
+        pygame.draw.rect(surf, (60, 65, 70), mast_rect)
+        pygame.draw.rect(surf, (30, 35, 40), mast_rect, 1)
+        pygame.draw.rect(surf, (180, 180, 190), (mast_x - 2, floor_y - mast_h + 5, 4, mast_h - 10))
+        fork_y = floor_y - 5 - self.fork_height
+        fork_len = 35
+        fork_start_x = mast_x if facing_right else mast_x - fork_len
+        pygame.draw.rect(surf, (40, 40, 40), (mast_x - 5, fork_y - 25, 10, 30))
+        pygame.draw.rect(surf, (150, 150, 155), (fork_start_x, fork_y, fork_len, 4))
+        return surf
+    def move_to(self, target_x, callback=None):
+        self.target_x = target_x; self.callback = callback; self.is_moving = True
+        if self.target_x > self.pos_x: self.facing_right = True
+        elif self.target_x < self.pos_x: self.facing_right = False
+        self.image = self.original_image_right if self.facing_right else self.original_image_left
+    def lift_forks(self, height, callback=None):
+        self.target_fork_height = height; self.callback = callback
+        self.state = 'LIFTING' if height > self.fork_height else 'LOWERING'
+    def update(self):
+        if self.is_moving:
+            dx = self.target_x - self.pos_x
+            if abs(dx) < MIN_SPEED * 2:
+                self.pos_x = self.target_x; self.is_moving = False
+                if self.callback: cb = self.callback; self.callback = None; cb()
+            else:
+                self.pos_x += dx * 0.08
+                if abs(dx) > 1 and abs(dx * 0.08) < 1: self.pos_x += 1 if dx > 0 else -1
+        if self.state in ['LIFTING', 'LOWERING']:
+            dh = self.target_fork_height - self.fork_height
+            if abs(dh) < 1:
+                self.fork_height = self.target_fork_height; self.state = 'IDLE'
+                self.image = self._create_surface(self.facing_right)
+                if self.callback: cb = self.callback; self.callback = None; cb()
+            else:
+                self.fork_height += dh * 0.2
+                self.image = self._create_surface(self.facing_right)
+        if self.cargo_sprite:
+            mast_offset = self.width if self.facing_right else 0
+            fork_x = self.pos_x + mast_offset
+            if not self.facing_right: fork_x -= 35
+            fork_y = self.pos_y - 10 - self.fork_height
+            self.cargo_sprite.rect.bottom = int(fork_y)
+            self.cargo_sprite.rect.centerx = int(fork_x + 17.5)
+        self.rect = self.image.get_rect(bottomleft=(int(self.pos_x), int(self.pos_y)))
+class ArraySimulation:
+    def __init__(self, screen):
+        self.screen = screen
+        self.logic = ArrayManager(capacity=10)
+        self.all_sprites = pygame.sprite.Group()
+        self.crates_group = pygame.sprite.Group()
+        self.SIM_WIDTH = 750
+        self.FLOOR_Y = SCREEN_HEIGHT - 100
+        self.RACK_BASE_Y = self.FLOOR_Y - 100
+        self.RACK_X_START = 110
+        self.SLOT_WIDTH = 60
+        self.LEVEL_HEIGHT = 70
+        self.HOME_X = 20
+        self.forklift = ForkliftSprite(self.HOME_X, self.FLOOR_Y)
+        self.all_sprites.add(self.forklift)
+        self.ui_x = 750; self.ui_w = 250
+        self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
+        self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
+        self.lcd.update_status("SELECT A SLOT")
+        btn_cx = self.ui_x + self.ui_w // 2
+        self.btn_write = RoundButton(btn_cx, 280, 45, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "WRITE", self.action_write)
+        self.btn_manifest = RoundButton(btn_cx, 390, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "MANIFEST", self.action_manifest)
+        self.btn_clear = RoundButton(btn_cx, 500, 45, BTN_RED_BASE, BTN_RED_LIGHT, "CLEAR", self.action_clear)
+        self.btn_resize = RoundButton(btn_cx, 610, 40, (200, 180, 50), (255, 230, 80), "RESIZE", self.action_resize_click)
+        self.selected_index = None
+        self.is_animating = False
+        self.show_manifest = False
+        self.manifest_scroll = 0
+        self.scanner_active = False
+        self.scanner_timer = 0
+        self.input_mode = None
+        self.recalculate_layout()
+        self.bg_surface = self._generate_background()
+    def recalculate_layout(self):
+        self.slot_rects = []
+        for i in range(self.logic.capacity):
+            row = i // 10
+            col = i % 10
+            x = self.RACK_X_START + (col * self.SLOT_WIDTH)
+            y = self.RACK_BASE_Y - (row * self.LEVEL_HEIGHT)
+            rect = pygame.Rect(x, y - 50, self.SLOT_WIDTH, 60)
+            self.slot_rects.append(rect)
+    def _generate_background(self):
+        bg = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        bg.fill(WALL_BASE_COLOR)
+        floor_rect = pygame.Rect(0, self.FLOOR_Y, SCREEN_WIDTH, SCREEN_HEIGHT - self.FLOOR_Y)
+        bg.fill(FLOOR_COLOR, floor_rect)
+        for x in range(0, SCREEN_WIDTH, 20):
+            color = (75, 80, 85) if (x // 20) % 2 == 0 else (85, 90, 95)
+            pygame.draw.rect(bg, color, (x, 0, 20, self.FLOOR_Y))
+        for _ in range(5000):
+            color = random.choice([CONCRETE_NOISE_1, CONCRETE_NOISE_2])
+            bg.set_at((random.randint(0, SCREEN_WIDTH-1), random.randint(self.FLOOR_Y, SCREEN_HEIGHT-1)), color)
+        rack_zone_rect = pygame.Rect(self.RACK_X_START - 20, self.FLOOR_Y, (self.SLOT_WIDTH * 10) + 40, 40)
+        pygame.draw.rect(bg, (40, 40, 40), rack_zone_rect)
+        for i in range(0, rack_zone_rect.width, 30):
+            p1 = (rack_zone_rect.left + i, rack_zone_rect.bottom)
+            p2 = (rack_zone_rect.left + i + 15, rack_zone_rect.top)
+            pygame.draw.line(bg, STRIPE_YELLOW, p1, p2, 3)
+        pygame.draw.line(bg, (0,0,0), (0, self.FLOOR_Y), (SCREEN_WIDTH, self.FLOOR_Y), 3)
+        num_rows = (self.logic.capacity - 1) // 10 + 1
+        rack_w = self.SLOT_WIDTH * 10 + 20
+        upright_color = (40, 60, 90)
+        for i in range(11):
+            x = self.RACK_X_START + (i * self.SLOT_WIDTH)
+            top_y = self.RACK_BASE_Y - ((num_rows - 1) * self.LEVEL_HEIGHT) - 10
+            pygame.draw.rect(bg, (30, 45, 70), (x+5, top_y, 4, self.FLOOR_Y - top_y))
+            pygame.draw.rect(bg, upright_color, (x-2, top_y, 4, self.FLOOR_Y - top_y))
+            pygame.draw.rect(bg, (30, 30, 30), (x-4, self.FLOOR_Y-2, 8, 2))
+        beam_color = (220, 100, 40)
+        beam_shadow = (180, 80, 30)
+        for r in range(num_rows):
+            y = self.RACK_BASE_Y - (r * self.LEVEL_HEIGHT)
+            pygame.draw.rect(bg, beam_color, (self.RACK_X_START - 10, y, rack_w, 8))
+            pygame.draw.rect(bg, beam_shadow, (self.RACK_X_START - 10, y+8, rack_w, 2))
+            for c in range(10):
+                idx = r * 10 + c
+                if idx < self.logic.capacity:
+                    x = self.RACK_X_START + (c * self.SLOT_WIDTH)
+                    pygame.draw.rect(bg, (200, 200, 200), (x + self.SLOT_WIDTH//2 - 10, y + 12, 20, 14))
+                    font = pygame.font.SysFont("Arial", 10, bold=True)
+                    txt = font.render(str(idx), True, (20, 20, 20))
+                    bg.blit(txt, (x + self.SLOT_WIDTH//2 - txt.get_width()//2, y + 13))
+        light_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        for i in range(0, SCREEN_WIDTH, 200):
+            pygame.draw.rect(bg, (20, 20, 20), (i, 0, 60, 20))
+            pygame.draw.ellipse(bg, (200, 255, 255), (i+5, 15, 50, 10))
+            points = [(i+10, 20), (i+50, 20), (i+150, self.FLOOR_Y), (i-80, self.FLOOR_Y)]
+            pygame.draw.polygon(light_layer, (255, 255, 220, 15), points)
+        bg.blit(light_layer, (0,0))
+        return bg
+    def get_slot_pos(self, index):
+        row = index // 10
+        col = index % 10
+        x = self.RACK_X_START + (col * self.SLOT_WIDTH) + (self.SLOT_WIDTH // 2)
+        y = self.RACK_BASE_Y - (row * self.LEVEL_HEIGHT)
+        return x, y
+    def handle_mouse_click(self, pos):
+        if self.is_animating: return
+        for i, rect in enumerate(self.slot_rects):
+            if rect.collidepoint(pos):
+                self.selected_index = i
+                self.input_mode = 'VALUE'
+                self.lcd.update_status(f"SLOT {i} SELECTED")
+                self.lcd.text = ""
+                return
+    def action_resize_click(self):
+        if self.is_animating: return
+        if self.input_mode == 'SIZE':
+            self.execute_resize()
+        else:
+            self.input_mode = 'SIZE'
+            self.selected_index = None
+            self.lcd.update_status("ENTER SIZE [10-30]")
+            self.lcd.text = ""
+    def execute_resize(self):
+        text = self.lcd.text
+        if not text.isdigit():
+            self.lcd.update_status("ERR: NUMBERS ONLY")
+            return
+        size = int(text)
+        if not 10 <= size <= 30:
+            self.lcd.update_status("ERR: 10-30 ONLY")
+            return
+        self.logic.resize(size)
+        for c in self.crates_group: c.kill()
+        self.recalculate_layout()
+        self.bg_surface = self._generate_background()
+        self.forklift.move_to(self.HOME_X)
+        self.lcd.update_status(f"RESIZED TO {size}")
+        self.input_mode = None
+    def action_write(self):
+        if self.is_animating: return
+        if self.selected_index is None:
+            self.lcd.update_status("ERR: SELECT SLOT")
+            return
+        text = self.lcd.text
+        if not text.isdigit():
+            self.lcd.update_status("ERR: ENTER VALUE")
+            return
+        val = int(text)
+        if val > 999:
+            self.lcd.update_status("ERR: MAX 999")
+            return
+        receipt = self.logic.write(self.selected_index, val)
+        self.is_animating = True
+        self.lcd.update_status(f"WRITING {val}...")
+        self.lcd.text = ""
+        target_idx = self.selected_index
+        self.selected_index = None
+        self.input_mode = None
+        existing_crate = next((c for c in self.crates_group if abs(c.rect.centerx - self.get_slot_pos(target_idx)[0]) < 10 and abs(c.rect.bottom - self.get_slot_pos(target_idx)[1]) < 10), None)
+        if existing_crate:
+            self.animate_removal(existing_crate, lambda: self.animate_insertion(target_idx, val))
+        else:
+            self.animate_insertion(target_idx, val)
+    def action_manifest(self):
+        if self.is_animating: return
+        self.show_manifest = True
+        self.manifest_scroll = 0
+        self.selected_index = None
+        self.input_mode = None
+        self.lcd.update_status("MANIFEST OPEN")
+    def action_clear(self):
+        if self.is_animating: return
+        if self.selected_index is None:
+            self.lcd.update_status("ERR: SELECT SLOT")
+            return
+        receipt = self.logic.clear_slot(self.selected_index)
+        target_idx = self.selected_index
+        self.selected_index = None
+        self.input_mode = None
+        if receipt['type'] == 'ERROR':
+            self.lcd.update_status(receipt['message'])
+            return
+        self.is_animating = True
+        self.lcd.update_status("CLEARING SLOT...")
+        target_crate = next((c for c in self.crates_group if abs(c.rect.centerx - self.get_slot_pos(target_idx)[0]) < 10 and abs(c.rect.bottom - self.get_slot_pos(target_idx)[1]) < 10), None)
+        if target_crate:
+            self.animate_removal(target_crate, self.on_animation_complete)
+        else:
+            self.on_animation_complete()
+    def animate_insertion(self, index, value):
+        crate = PalletCrateSprite(self.HOME_X, self.FLOOR_Y, value)
+        self.all_sprites.add(crate); self.crates_group.add(crate)
+        self.forklift.cargo_sprite = crate
+        slot_x, slot_y = self.get_slot_pos(index)
+        target_x = slot_x - 87
+        shelf_lift = (self.FLOOR_Y - slot_y)
+        clearance_lift = shelf_lift + 15
+        def step5_return():
+            self.forklift.move_to(self.HOME_X, self.on_animation_complete)
+        def step4_lower_forks():
+            self.forklift.lift_forks(0, step5_return)
+        def step3_detach():
+            self.forklift.cargo_sprite = None
+            crate.rect.bottom = slot_y
+            step4_lower_forks()
+        def step2_lower_to_shelf():
+            self.forklift.lift_forks(shelf_lift, step3_detach)
+        def step1_move_in():
+            self.forklift.move_to(target_x, step2_lower_to_shelf)
+        def step0_lift():
+            self.forklift.lift_forks(clearance_lift, step1_move_in)
+        step0_lift()
+    def animate_removal(self, crate, next_callback):
+        target_x = crate.rect.centerx - 87
+        slot_y = crate.rect.bottom
+        shelf_lift = (self.FLOOR_Y - slot_y)
+        clearance_lift = shelf_lift + 15
+        def step5_destroy():
+            crate.kill()
+            self.forklift.cargo_sprite = None
+            self.forklift.move_to(self.HOME_X, next_callback)
+        def step4_lower_to_floor():
+            self.forklift.lift_forks(0, step5_destroy)
+        def step3_move_out():
+            self.forklift.move_to(target_x - 20, step4_lower_to_floor)
+        def step2_lift_off():
+            self.forklift.cargo_sprite = crate
+            self.forklift.lift_forks(clearance_lift, step3_move_out)
+        def step1_raise_forks():
+            self.forklift.lift_forks(shelf_lift, step2_lift_off)
+        self.forklift.move_to(target_x, step1_raise_forks)
+    def on_animation_complete(self):
+        self.is_animating = False
+        self.lcd.update_status("READY")
+    def handle_events(self, event):
+        if self.show_manifest:
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button in [1, 3]:
+                self.show_manifest = False
+                self.lcd.update_status("READY")
+            elif event.type == pygame.MOUSEWHEEL:
+                self.manifest_scroll += event.y * 20
+                max_scroll = 0
+                min_scroll = -max(0, (len(self.logic.data) * 20) - 350)
+                if self.manifest_scroll > max_scroll: self.manifest_scroll = max_scroll
+                if self.manifest_scroll < min_scroll: self.manifest_scroll = min_scroll
+            return
+        self.lcd.handle_event(event)
+        self.btn_write.handle_event(event)
+        self.btn_manifest.handle_event(event)
+        self.btn_clear.handle_event(event)
+        self.btn_resize.handle_event(event)
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self.handle_mouse_click(event.pos)
+    def update(self):
+        if self.show_manifest: return
+        self.all_sprites.update()
+        self.lcd.update()
+    def draw_manifest(self):
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+        w, h = 400, 500
+        x, y = (SCREEN_WIDTH - w) // 2, (SCREEN_HEIGHT - h) // 2
+        pygame.draw.rect(self.screen, (240, 240, 235), (x, y, w, h), border_radius=5)
+        font_head = pygame.font.SysFont("Courier New", 24, bold=True)
+        head = font_head.render("INVENTORY MANIFEST", True, (20, 20, 20))
+        self.screen.blit(head, (x + w//2 - head.get_width()//2, y + 20))
+        pygame.draw.line(self.screen, (50, 50, 50), (x+20, y+50), (x+w-20, y+50), 2)
+        list_rect = pygame.Rect(x + 20, y + 60, w - 40, h - 100)
+        self.screen.set_clip(list_rect)
+        font_mono = pygame.font.SysFont("Courier New", 16)
+        manifest = self.logic.get_manifest()
+        col1_x = x + 40
+        col2_x = x + 200
+        self.screen.set_clip(None)
+        pygame.draw.rect(self.screen, (240, 240, 235), (x+20, y+60, w-40, 30))
+        self.screen.blit(font_mono.render("INDEX", True, (80, 80, 80)), (col1_x, y + 65))
+        self.screen.blit(font_mono.render("VALUE", True, (80, 80, 80)), (col2_x, y + 65))
+        pygame.draw.line(self.screen, (150, 150, 150), (x+20, y+85), (x+w-20, y+85), 1)
+        content_rect = pygame.Rect(x + 20, y + 90, w - 40, h - 130)
+        self.screen.set_clip(content_rect)
+        start_y = y + 90 + self.manifest_scroll
+        for item in manifest:
+            idx_str = f"[{item['index']}]"
+            val_str = str(item['value']) if item['value'] is not None else "---"
+            color = (0, 0, 0) if item['value'] is not None else (150, 150, 150)
+            self.screen.blit(font_mono.render(idx_str, True, (50, 50, 50)), (col1_x, start_y))
+            self.screen.blit(font_mono.render(val_str, True, color), (col2_x, start_y))
+            start_y += 20
+        self.screen.set_clip(None)
+        foot = font_mono.render("- CLICK TO CLOSE -", True, (100, 100, 100))
+        self.screen.blit(foot, (x + w//2 - foot.get_width()//2, y + h - 30))
+    def draw(self):
+        self.screen.blit(self.bg_surface, (0, 0))
+        if self.selected_index is not None:
+            rect = self.slot_rects[self.selected_index]
+            pygame.draw.rect(self.screen, (0, 255, 0), rect, 2, border_radius=4)
+            if self.logic.data[self.selected_index] is None and not self.is_animating:
+                ghost_surf = pygame.Surface((40, 40), pygame.SRCALPHA)
+                pygame.draw.rect(ghost_surf, (0, 255, 0, 50), (0, 0, 40, 40), border_radius=2)
+                pygame.draw.rect(ghost_surf, (0, 255, 0), (0, 0, 40, 40), 1, border_radius=2)
+                cx, cy = self.get_slot_pos(self.selected_index)
+                self.screen.blit(ghost_surf, (cx - 20, cy - 40))
+        for sprite in self.all_sprites:
+            if isinstance(sprite, ForkliftSprite):
+                s = pygame.Surface((sprite.width + 20, 20), pygame.SRCALPHA)
+                pygame.draw.ellipse(s, (0,0,0,80), (0,0,sprite.width+20, 20))
+                self.screen.blit(s, (sprite.rect.x - 10, sprite.rect.bottom - 10))
+            elif isinstance(sprite, PalletCrateSprite) and sprite.rect.bottom == self.FLOOR_Y:
+                if not self.forklift.cargo_sprite == sprite:
+                    s = pygame.Surface((44, 10), pygame.SRCALPHA)
+                    pygame.draw.ellipse(s, (0,0,0,60), (0,0,44,10))
+                    self.screen.blit(s, (sprite.rect.x - 2, sprite.rect.bottom - 5))
+        self.all_sprites.draw(self.screen)
         self.chassis.draw(self.screen)
         self.lcd.draw(self.screen)
-        self.btn_insert.draw(self.screen)
-        self.btn_reset.draw(self.screen)
-        self.btn_scan.draw(self.screen)
-        if self.show_traversal_menu:
-            self.draw_traversal_menu()
-        elif self.traversal_result_data:
-            self.draw_traversal_result()
+        self.btn_write.draw(self.screen)
+        self.btn_manifest.draw(self.screen)
+        self.btn_clear.draw(self.screen)
+        self.btn_resize.draw(self.screen)
+        if self.show_manifest:
+            self.draw_manifest()
 </file>
 
 <file path="FullStack Project Bible.ipynb/FullStack Project Bible.ipynb">
@@ -2390,57 +4228,63 @@ CURRENT MODULES:
 1. LEVEL 1 - THE VERTICAL PARKING BAY (STACK)
    - Logic: LIFO (Last In, First Out).
    - Setting: A rugged maintenance hangar with textured asphalt floors.
-   - Metaphor: A narrow bay where the last truck in blocks the exit.
-   - Animation: Blocking trucks automatically "shuffle" to a holding zone.
 
 2. LEVEL 2 - THE WEIGH STATION (QUEUE)
    - Logic: FIFO (First In, First Out).
-   - Setting: High-detail Industrial Yard (Asphalt, Fences, Shipping Containers).
-   - Metaphor: A highway weigh station.
-   - Animation: "Loopback" road for trucks cycling to the back of the line.
+   - Setting: High-detail Industrial Yard with procedural props.
 
 3. LEVEL 3 - THE CONVEYOR BELT (LINKED LIST)
    - Logic: Singly Linked List (Insert/Remove at Index).
    - Setting: Factory floor with volumetric lighting ("god rays").
-   - Metaphor: Boxes on a conveyor represent nodes, linked by logical chains.
-   - Interaction: "Click-to-Place" insertion mechanics.
 
 4. LEVEL 4 - THE ROUTING FLOOR (BINARY SEARCH TREE)
-   - Logic: Binary Search Tree (Insertion, In-Order, Pre-Order, Post-Order).
-   - Setting: A high-detail, atmospheric warehouse with animated conveyors.
-   - Metaphor: Packages travel a branching conveyor system based on ID value.
-   - Features: 
-     - Dynamic Layout Engine: The tree automatically resizes and "zooms out" 
-       as it gets deeper to fit the screen.
-     - Traversal Visualization: A "System Drone" animates the chosen traversal
-       path (In-Order, Pre-Order, Post-Order) by visiting each node.
-     - Scan Manifest: Traversal results are displayed on a thematic paper
-       manifest popup after the drone scan is complete.
+   - Logic: Binary Search Tree (Insertion, Traversals).
+   - Setting: A high-detail warehouse with animated conveyors and a system drone.
+
+5. LEVEL 5 - THE EXPRESSION PARSER (BINARY TREE)
+   - Logic: Infix to Postfix conversion (Shunting-yard) to build an expression tree.
+   - Setting: An automated analysis floor with animated conveyors.
+
+6. LEVEL 6 - THE SORTING FLOOR (SORTING ALGORITHMS)
+   - Logic: Bubble, Selection, Insertion, Merge, and Quick Sort.
+   - Setting: A large-scale warehouse bay with an overhead Gantry Crane.
+
+7. LEVEL 7 - THE AUTOMATION LAB (RECURSION)
+   - Logic: Interactive Tower of Hanoi (Manual & Auto-Solve).
+   - Setting: A high-detail warehouse bay with a dynamic magnetic crane.
+
+8. LEVEL 8 - THE SMART RACK (ARRAY)
+   - Logic: Fixed-size Array with Random Access (O(1)).
+   - Setting: A multi-level pallet racking system with industrial lighting.
+   - Features:
+     - Visualizes the difference between Write (slow, mechanical Forklift) and 
+       Read (instant, laser scanner) operations.
+     - Dynamic resizing (10-30 slots) that automatically adjusts the rack 
+       layout into multiple aisles/levels.
+     - "Click-to-Select" interface for intuitive interaction.
+     - Scrollable inventory manifest.
 
 DIRECTORY STRUCTURE:
 Full_Stack_Sim/
-├── main.py                   # Entry Point (Main Menu & Scene Switcher)
-├── settings.py               # Config, Palettes, Physics Constants
-├── core/                     # Shared Engine Code
-│   ├── sprites.py            # Procedural Asset Generators
-│   └── ui.py                 # Rugged UI System
-└── simulation/               # Level Logic
-    ├── site_parking_stack.py # Level 1: Stack
-    ├── site_parking_queue.py # Level 2: Queue
-    ├── site_conveyor_list.py # Level 3: Linked List
-    └── site_router_tree.py   # Level 4: BST
+├── main.py                      # Entry Point (Main Menu & Scene Switcher)
+├── settings.py                  # Config, Palettes, Physics Constants
+├── core/                        # Shared Engine Code
+│   ├── sprites.py               # Procedural Asset Generators
+│   └── ui.py                    # Rugged UI System
+└── simulation/                  # Level Logic
+    ├── site_parking_stack.py    # Level 1: Stack
+    ├── site_parking_queue.py    # Level 2: Queue
+    ├── site_conveyor_list.py    # Level 3: Linked List
+    ├── site_router_tree.py      # Level 4: BST
+    ├── site_expression_tree.py  # Level 5: Binary Tree
+    ├── site_sorting_floor.py    # Level 6: Sorting
+    ├── site_recursion_lab.py    # Level 7: Recursion
+    └── site_warehouse_array.py  # Level 8: Array
 
 HOW TO RUN:
 1. Ensure Python 3.x and Pygame are installed (`pip install pygame`).
 2. Run: `python main.py`
 3. Select a Module from the Main Menu.
-
-CONTROLS (HANDHELD UNIT):
-- LCD Screen: Type Label/ID (Integers for BST).
-- GREEN BUTTON: Add Item (Append, Enqueue, or Inject).
-- RED BUTTON: Remove Item (Depart, Dequeue, or Flush System).
-- BLUE BUTTON: Context specific (Manifest/Scan).
-- GRAY BUTTON: Skip Animation (Stack/Queue only).
 </file>
 
 <file path="ROADMAP.txt/ROADMAP.txt">
@@ -2450,37 +4294,51 @@ PHASE 1: THE STACK (VERTICAL MAINTENANCE BAY) - [COMPLETED]
 [x] Core Architecture (MVC Pattern).
 [x] Logic: LIFO Stack with "Shuffle" algorithm.
 [x] UI Overhaul: Integrated Rugged Handheld Interface.
-[x] Feature: "Skip Animation" button for instant state synchronization.
 
 PHASE 2: THE QUEUE (THE WEIGH STATION) - [COMPLETED]
 [x] Logic: FIFO Queue with "Cycling" algorithm (Loopback).
-[x] Logic Fix: Loopback trucks now correctly count towards Arrival/Departure stats.
 [x] Visuals: High-Fidelity Industrial Yard with procedural props.
-[x] Polish: Removed visual artifacts (skid marks) from road corners.
 
 PHASE 3: LINKED LIST (THE CONVEYOR BELT) - [COMPLETED]
-[x] Metaphor: Re-themed from "Convoy" to "Conveyor Belt" with boxes.
 [x] Logic: Singly Linked List with Insert/Delete At Index.
 [x] Visuals: High-detail warehouse with volumetric lighting.
-[x] Interaction: Implemented intuitive "Click-to-Place" mouse interaction.
 
-PHASE 4: TREES (THE ROUTING FLOOR) - [COMPLETED]
-[x] Logic: Binary Search Tree insertion (now handles duplicates).
+PHASE 4: BST (THE ROUTING FLOOR) - [COMPLETED]
+[x] Logic: Binary Search Tree insertion and traversals.
 [x] Smart Layout: Implemented "Smooth Zoom" system.
-    - Tree starts large and readable.
-    - Automatically shrinks and repositions as depth increases.
-[x] Polishing: Fixed layout, centering, and node clumping issues.
-[x] Feature: Implemented In-Order, Pre-Order, and Post-Order traversals.
-[x] Animation: Added "System Drone" to visualize traversal path.
-[x] UI: Replaced traversal log with a popup "Scan Manifest" report.
-[x] Visuals: Complete graphical overhaul with detailed warehouse environment, animated conveyors, and upgraded drone sprite.
+[x] Feature: Traversal visualization with animated drone.
 
-PHASE 5: SORTING ALGORITHMS - [NEXT PRIORITY]
-[ ] The Sorting Floor (Gantry Crane System).
-    - Metaphor: A row of shipping containers.
-    - Logic: Bubble Sort / Selection Sort.
-    - Visuals: An overhead Gantry Crane that picks up and swaps containers.
-    - Highlights: Color-coded comparisons (Red = Compare, Green = Sorted).
+PHASE 5: BINARY TREE (THE EXPRESSION PARSER) - [COMPLETED]
+[x] Logic: Shunting-yard algorithm and Tree generation.
+[x] Feature: Pre/In/Post-order traversal analysis.
+
+PHASE 6: SORTING ALGORITHMS (THE SORTING FLOOR) - [COMPLETED]
+[x] Logic: Bubble, Selection, Insertion, Merge, Quick Sort.
+[x] Visuals: Gantry Crane animation and Glow effects.
+
+PHASE 7: RECURSION (THE AUTOMATION LAB) - [COMPLETED]
+[x] Logic: Tower of Hanoi (Manual & Auto-Solve).
+[x] Visuals: Magnetic Crane with dynamic hoist cable.
+
+PHASE 8: ARRAYS (THE SMART RACK) - [COMPLETED]
+[x] Logic: Fixed-size array with O(1) Read and O(n) Write/Clear simulation.
+[x] Visuals: High-fidelity "Pallet Racking" environment with volumetric lighting.
+[x] Animation: Industrial Forklift with complex lift/place physics.
+[x] Feature: Dynamic Resizing (10-30 slots) with multi-level shelf generation.
+[x] Interaction: "Click-to-Select" workflow and Scrollable Manifest.
+
+---
+PROJECT STATUS: PHASE 8 COMPLETE.
+
+NEXT STEPS
+
+PHASE 9: MAIN MENU OVERHAUL
+[ ] DESIGN: Replace the basic button list with a "Security Desk" or "Dashboard" aesthetic.
+[ ] VISUALS: Add CRT monitor effects, scanlines, and a map of the facility.
+
+PHASE 10: FINAL POLISH
+[ ] AUDIO: Add mechanical sound effects (optional).
+[ ] QA: Final bug sweep across all modules.
 </file>
 
 </files>
