@@ -1,31 +1,37 @@
+"""
+Global Configuration File.
+Contains constants for screen dimensions, colors, physics parameters, 
+and asset paths used throughout the simulation.
+"""
 import pygame
 import os
 
+# --- System Paths & Display ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
-
 SCREEN_WIDTH = 1000
 SCREEN_HEIGHT = 700
 FPS = 60
 
+# --- Color Palette ---
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 
+# UI Colors (Scanner/Handheld)
 DEVICE_BODY      = (60, 65, 70)
 DEVICE_BEZEL     = (30, 35, 40)
 DEVICE_HIGHLIGHT = (90, 95, 100)
 BOLT_COLOR       = (180, 180, 185)
 STRIPE_YELLOW    = (255, 190, 0)
 STRIPE_BLACK     = (20, 20, 20)
-
 LCD_BG           = (0, 40, 40)
 LCD_TEXT_MAIN    = (50, 255, 200)
 LCD_TEXT_DIM     = (0, 150, 120)
 LCD_SCANLINE     = (0, 20, 20)
 
+# Button Colors
 BTN_GREEN_BASE   = (0, 160, 60)
 BTN_GREEN_LIGHT  = (50, 200, 100)
-# --- NEW: Alternate green for UI variety ---
 BTN_ALT_GREEN_BASE = (0, 180, 100)
 BTN_ALT_GREEN_LIGHT = (50, 220, 140)
 BTN_RED_BASE     = (180, 40, 40)
@@ -34,6 +40,7 @@ BTN_BLUE_BASE    = (40, 100, 180)
 BTN_BLUE_LIGHT   = (80, 140, 220)
 BTN_SHADOW       = (20, 25, 30)
 
+# Environment Colors (Concrete/Asphalt)
 YARD_CONCRETE    = (130, 130, 135)
 YARD_NOISE_1     = (120, 120, 125)
 YARD_NOISE_2     = (140, 140, 145)
@@ -41,7 +48,6 @@ ASPHALT_BASE     = (60, 60, 65)
 ASPHALT_DARK     = (40, 40, 45)
 TIRE_MARKS       = (30, 30, 35)
 ROAD_STRIPE      = (200, 200, 200)
-
 BRICK_RED        = (130, 70, 60)
 BRICK_DETAIL     = (110, 50, 40)
 ROOF_TAR         = (50, 50, 55)
@@ -50,6 +56,7 @@ WAREHOUSE_ROOF   = (100, 105, 110)
 BOLLARD_YELLOW   = (220, 180, 20)
 SHADOW_COLOR     = (0, 0, 0, 60)
 
+# Cargo Colors
 CONTAINER_RED    = (160, 50, 40)
 CONTAINER_BLUE   = (40, 80, 140)
 CONTAINER_GREEN  = (50, 100, 60)
@@ -62,6 +69,7 @@ DRAIN_METAL      = (70, 70, 75)
 OIL_STAIN        = (30, 30, 30, 100)
 CRACK_COLOR      = (80, 80, 85)
 
+# Simulation Specific Colors
 FLOOR_COLOR = (115, 118, 122)
 WALL_TOP_COLOR = (210, 215, 220)
 WALL_SIDE_COLOR = (80, 85, 90)
@@ -72,23 +80,22 @@ WALL_CORRUGATED_DARK = (50, 55, 60)
 WALL_CORRUGATED_LIGHT = (65, 70, 75)
 CONTROL_ROOM_GLOW = (180, 220, 230, 50)
 STENCIL_TEXT_COLOR = (255, 255, 255, 60)
-
 TRUCK_CAB_WHITE = (245, 245, 250)
 TRUCK_CHASSIS = (50, 50, 55)
 WINDSHIELD = (40, 44, 50)
 TIRE_COLOR = (20, 20, 20)
-
 BOX_COLOR_1 = (205, 133, 63)
 BOX_COLOR_2 = (222, 184, 135)
 BOX_TAPE    = (190, 120, 50)
 
+# --- Physics & Dimensions ---
 CRATE_WIDTH = 45
 CRATE_HEIGHT = 90
 PARKING_GAP = 10
-
 LERP_FACTOR = 0.12
 MIN_SPEED = 1.5
 
+# --- Spawn Coordinates ---
 SPAWN_X = -100
 SPAWN_Y = SCREEN_HEIGHT - CRATE_HEIGHT - 40
 RECEIVING_BAY_X = 100
@@ -100,6 +107,7 @@ HOLDING_ZONE_Y = SCREEN_HEIGHT - 60
 SHIPPING_BAY_X = -150
 SHIPPING_BAY_Y = SCREEN_HEIGHT - CRATE_HEIGHT - 250
 
+# --- Warehouse Interior ---
 WAREHOUSE_PILLAR = (110, 120, 125)
 SHELF_COLOR = (180, 140, 100)
 CEILING_TRUSS = (70, 75, 80)

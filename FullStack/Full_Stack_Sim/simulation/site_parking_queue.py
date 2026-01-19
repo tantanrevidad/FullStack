@@ -6,12 +6,17 @@ from core.sprites import CrateSprite
 from core.ui import HandheldChassis, LCDDisplay, RoundButton
 
 class Vehicle:
+    """Data model for a vehicle in the queue."""
     def __init__(self, plate, arrival_count, departure_count):
         self.plate = plate
         self.arrival_count = arrival_count
         self.departure_count = departure_count
 
 class QueueManager:
+    """
+    Backend Logic for FIFO (First-In, First-Out) Queue.
+    Handles enqueue/dequeue operations and tracks vehicle history.
+    """
     def __init__(self, capacity=10):
         self.items = []
         self.capacity = capacity
@@ -23,20 +28,17 @@ class QueueManager:
         return self.history[plate]
 
     def enqueue(self, plate):
+        """Adds a vehicle to the end of the queue."""
         if len(self.items) >= self.capacity:
             return {"type": "OVERFLOW", "message": "LANE FULL"}
-        
-        # Check for duplicates in current queue
         for v in self.items:
             if v.plate == plate:
                 return {"type": "DUPLICATE", "message": "ALREADY HERE"}
         
         stats = self._get_stats(plate)
         stats['arrivals'] += 1
-        
         new_vehicle = Vehicle(plate, stats['arrivals'], stats['departures'])
         self.items.append(new_vehicle)
-        
         return {
             "type": "ENQUEUE",
             "index": len(self.items) - 1,
@@ -44,53 +46,46 @@ class QueueManager:
         }
 
     def remove_vehicle(self, plate):
+        """
+        Removes a specific vehicle.
+        If the vehicle is not at the front, cycles preceding vehicles to the back.
+        """
         target_index = -1
         for i, v in enumerate(self.items):
             if v.plate == plate:
                 target_index = i
                 break
-        
         if target_index == -1:
             return [{"type": "ERROR", "message": "NOT FOUND"}]
-
+            
         events = []
-        
-        # Cycle the vehicles in front of the target
+        # Cycle items in front of target
         for _ in range(target_index):
             cycling_vehicle = self.items.pop(0)
-            
-            # UPDATE: Cycling counts as a Departure AND an Arrival
             stats = self._get_stats(cycling_vehicle.plate)
             stats['departures'] += 1
             stats['arrivals'] += 1
-            
-            # Update the vehicle object to reflect new stats
             cycling_vehicle.arrival_count = stats['arrivals']
             cycling_vehicle.departure_count = stats['departures']
-            
             self.items.append(cycling_vehicle)
-            
             events.append({
                 "type": "CYCLE",
                 "data": cycling_vehicle,
                 "new_index": len(self.items) - 1
             })
-
-        # Remove the actual target
+            
+        # Remove target
         target_vehicle = self.items.pop(0)
         stats = self._get_stats(target_vehicle.plate)
         stats['departures'] += 1
-        
         events.append({
             "type": "DEPART",
             "data": target_vehicle,
             "stats": stats
         })
-        
         return events
 
     def get_inventory_report(self):
-        # Report based on history of all items currently in the queue
         report = []
         for v in self.items:
             stats = self.history[v.plate]
@@ -102,6 +97,10 @@ class QueueManager:
         return report
 
 class ParkingQueueSimulation:
+    """
+    Visualization for the Queue Module.
+    Renders the weigh station lane and handles loopback animations.
+    """
     def __init__(self, screen):
         self.screen = screen
         self.logic = QueueManager(capacity=10)
@@ -113,7 +112,6 @@ class ParkingQueueSimulation:
         self.ui_y = 0
         self.ui_w = 250
         self.ui_h = SCREEN_HEIGHT
-        
         self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
         self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
         self.lcd.update_status("WEIGH STATION")
@@ -136,13 +134,10 @@ class ParkingQueueSimulation:
         self.GATE_X = 700
         self.ENTRY_SPAWN = (-100, self.LANE_Y)
         self.EXIT_POINT = (SCREEN_WIDTH + 100, self.LANE_Y)
-        
-        # Loopback Road Coordinates
         self.LOOP_EXIT_X = self.GATE_X + 40
         self.LOOP_DOWN_Y = 580
         self.LOOP_BACK_X = 20
         
-        # Pre-render background
         self.bg_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
         self._generate_static_environment()
 
@@ -204,6 +199,8 @@ class ParkingQueueSimulation:
             surf.set_at((x, y), color)
         for _ in range(20):
             self.draw_crack(surf, random.randint(0, 750), random.randint(0, 700))
+            
+        # Roads
         rw = 80
         def draw_road_rect(rect):
             pygame.draw.rect(surf, ASPHALT_BASE, rect)
@@ -211,19 +208,25 @@ class ParkingQueueSimulation:
                 rx = random.randint(rect.left, rect.right-1)
                 ry = random.randint(rect.top, rect.bottom-1)
                 surf.set_at((rx, ry), ASPHALT_DARK)
+                
         draw_road_rect(pygame.Rect(-100, self.LANE_Y - rw//2, 900, rw))
         draw_road_rect(pygame.Rect(self.LOOP_EXIT_X - rw//2, self.LANE_Y, rw, self.LOOP_DOWN_Y - self.LANE_Y))
         draw_road_rect(pygame.Rect(self.LOOP_BACK_X, self.LOOP_DOWN_Y - rw//2, self.LOOP_EXIT_X - self.LOOP_BACK_X, rw))
         draw_road_rect(pygame.Rect(self.LOOP_BACK_X - rw//2, self.LANE_Y, rw, self.LOOP_DOWN_Y - self.LANE_Y))
+        
         for x in range(-100, 800, 60):
             pygame.draw.line(surf, ROAD_STRIPE, (x, self.LANE_Y), (x+30, self.LANE_Y), 2)
         pygame.draw.line(surf, (255, 255, 255), (self.GATE_X, self.LANE_Y - 35), (self.GATE_X, self.LANE_Y + 35), 6)
+        
+        # Props
         self.draw_drain(surf, 200, 500)
         self.draw_drain(surf, 600, 500)
         oil_surf = pygame.Surface((60, 40), pygame.SRCALPHA)
         pygame.draw.ellipse(oil_surf, OIL_STAIN, (0,0,60,40))
         surf.blit(oil_surf, (self.GATE_X - 20, self.LANE_Y + 10))
-        island_rect = pygame.Rect(self.LOOP_BACK_X + 40 + 10, self.LANE_Y + 40 + 10, 
+        
+        # Island
+        island_rect = pygame.Rect(self.LOOP_BACK_X + 40 + 10, self.LANE_Y + 40 + 10,
                                   (self.LOOP_EXIT_X - self.LOOP_BACK_X) - 80 - 20,
                                   (self.LOOP_DOWN_Y - self.LANE_Y) - 80 - 20)
         pygame.draw.rect(surf, (125, 125, 130), island_rect)
@@ -232,6 +235,7 @@ class ParkingQueueSimulation:
             p2 = (i + 20, island_rect.top)
             if p2[0] < island_rect.right:
                 pygame.draw.line(surf, (115, 115, 120), p1, p2, 2)
+                
         self.draw_container(surf, island_rect.left + 20, island_rect.top + 20, CONTAINER_RED)
         self.draw_container(surf, island_rect.left + 40, island_rect.top + 10, CONTAINER_BLUE)
         self.draw_container(surf, island_rect.left + 160, island_rect.top + 30, CONTAINER_GREEN, angle=10)
@@ -239,8 +243,10 @@ class ParkingQueueSimulation:
         self.draw_barrel_group(surf, island_rect.right - 80, island_rect.bottom - 40)
         self._draw_static_pallet(surf, island_rect.right - 120, island_rect.bottom - 50)
         self._draw_static_pallet(surf, island_rect.right - 120, island_rect.bottom - 80)
+        
         self.draw_fence(surf, (0, 180), (400, 180))
         self.draw_fence(surf, (400, 180), (400, 0))
+        
         for i in range(3):
             for j in range(2):
                 self._draw_static_pallet(surf, 50 + i*40, 100 + j*40)
@@ -280,6 +286,8 @@ class ParkingQueueSimulation:
     def draw_dynamic_environment(self):
         self.screen.blit(self.bg_surface, (0, 0))
         self.draw_brick_building(self.GATE_X + 20, self.LANE_Y - 130, 80, 60, "GUARD")
+        
+        # Warehouse
         wh_rect = pygame.Rect(450, 30, 250, 120)
         pygame.draw.rect(self.screen, SHADOW_COLOR, wh_rect.move(10, 10))
         pygame.draw.rect(self.screen, WAREHOUSE_WALL, wh_rect)
@@ -291,15 +299,21 @@ class ParkingQueueSimulation:
         font = pygame.font.SysFont("Impact", 20)
         lbl = font.render("LOGISTICS HUB", True, (180, 180, 180))
         self.screen.blit(lbl, (575 - lbl.get_width()//2, 60))
+        
+        # Scale
         scale_rect = pygame.Rect(self.GATE_X - 80, self.LANE_Y - 35, 100, 70)
         pygame.draw.rect(self.screen, (50, 50, 50), scale_rect)
         pygame.draw.rect(self.screen, (180, 180, 180), scale_rect.inflate(-4, -4))
         pygame.draw.rect(self.screen, (100, 100, 100), scale_rect.inflate(-4, -4), 1)
+        
+        # Gate Arm
         gate_pivot = (self.GATE_X + 25, self.LANE_Y - 40)
         pygame.draw.circle(self.screen, (200, 50, 50), gate_pivot, 6)
         pygame.draw.line(self.screen, (255, 255, 255), gate_pivot, (self.GATE_X + 25, self.LANE_Y + 40), 4)
         pygame.draw.line(self.screen, (200, 0, 0), gate_pivot, (self.GATE_X + 25, self.LANE_Y + 40), 4)
-        island_rect = pygame.Rect(self.LOOP_BACK_X + 40 + 10, self.LANE_Y + 40 + 10, 
+        
+        # Bollards
+        island_rect = pygame.Rect(self.LOOP_BACK_X + 40 + 10, self.LANE_Y + 40 + 10,
                                   (self.LOOP_EXIT_X - self.LOOP_BACK_X) - 80 - 20,
                                   (self.LOOP_DOWN_Y - self.LANE_Y) - 80 - 20)
         self.draw_bollard(island_rect.left, island_rect.top)
@@ -335,17 +349,21 @@ class ParkingQueueSimulation:
         if not plate:
             self.lcd.update_status("ERR: NO INPUT")
             return
+            
         receipt = self.logic.enqueue(plate)
         if receipt['type'] in ['OVERFLOW', 'DUPLICATE']:
             self.lcd.update_status(f"ERR: {receipt['message']}")
             return
+            
         self.lcd.update_status(f"IN: {plate}")
         self.lcd.text = ""
+        
         new_crate = CrateSprite(self.ENTRY_SPAWN[0], self.ENTRY_SPAWN[1], receipt['data'].plate)
         self._scale_sprite(new_crate)
         self.all_sprites.add(new_crate)
         self.crates_group.add(new_crate)
         self.visual_queue.append(new_crate)
+        
         target_x = self.GATE_X - (receipt['index'] * self.SLOT_GAP)
         self.is_animating = True
         new_crate.move_to((target_x, self.LANE_Y), callback=self.on_animation_complete)
@@ -354,10 +372,12 @@ class ParkingQueueSimulation:
         if self.is_animating or self.show_summary: return
         plate = self.lcd.text.upper()
         if not plate: return
+        
         events = self.logic.remove_vehicle(plate)
         if events[0]['type'] == 'ERROR':
             self.lcd.update_status(f"ERR: {events[0]['message']}")
             return
+            
         self.lcd.update_status(f"OUT: {plate}")
         self.lcd.text = ""
         self.is_animating = True
@@ -365,32 +385,29 @@ class ParkingQueueSimulation:
         self.process_next_event()
 
     def action_skip(self):
+        """Resets the simulation state to match the logic state instantly."""
         if not self.is_animating: return
         
-        # 1. Stop all movement
+        # Stop all movement
         for s in self.all_sprites:
             s.is_moving = False
             s.on_finish_callback = None
             
-        # 2. Clear pending events
         self.event_queue = []
         
-        # 3. Sync Visuals to Logic
+        # Sync Visuals to Logic
         valid_plates = [v.plate for v in self.logic.items]
-        
-        # Kill sprites that shouldn't exist
         for sprite in self.crates_group:
             if sprite.plate not in valid_plates:
                 sprite.kill()
                 
-        # Rebuild visual_queue to match logic order
         self.visual_queue = []
         for vehicle in self.logic.items:
             found_sprite = next((s for s in self.crates_group if s.plate == vehicle.plate), None)
             if found_sprite:
                 self.visual_queue.append(found_sprite)
                 
-        # 4. Snap sprites to correct positions
+        # Snap sprites to correct positions
         for i, sprite in enumerate(self.visual_queue):
             target_x = self.GATE_X - (i * self.SLOT_GAP)
             sprite.pos_x = target_x
@@ -398,7 +415,6 @@ class ParkingQueueSimulation:
             sprite.rect.center = (int(sprite.pos_x), int(sprite.pos_y))
             self._force_orientation(sprite, 0)
             
-        # 5. Reset State
         self.is_animating = False
         self.lcd.update_status("READY")
 
@@ -407,12 +423,16 @@ class ParkingQueueSimulation:
             self._realign_queue()
             self.on_animation_complete()
             return
+            
         event = self.event_queue.pop(0)
+        
         if event['type'] == 'CYCLE':
             sprite = self.visual_queue.pop(0)
             self.visual_queue.append(sprite)
             self._realign_queue(exclude_sprites=[sprite])
+            
             final_slot_x = self.GATE_X - (event['new_index'] * self.SLOT_GAP)
+            
             def step4_to_slot():
                 sprite.move_to((final_slot_x, self.LANE_Y), callback=lambda: [self._force_orientation(sprite, 0), self.process_next_event()])
             def step3_up():
@@ -424,7 +444,9 @@ class ParkingQueueSimulation:
             def step1_down():
                 self._force_orientation(sprite, 270)
                 sprite.move_to((self.LOOP_EXIT_X, self.LOOP_DOWN_Y + 30), callback=step2_left)
+                
             sprite.move_to((self.LOOP_EXIT_X, self.LANE_Y), callback=step1_down)
+            
         elif event['type'] == 'DEPART':
             sprite = self.visual_queue.pop(0)
             def cleanup():
@@ -468,14 +490,18 @@ class ParkingQueueSimulation:
         overlay.set_alpha(230)
         overlay.fill((20, 25, 30))
         self.screen.blit(overlay, (0, 0))
+        
         font_title = pygame.font.SysFont("Arial", 24, bold=True)
         font_mono = pygame.font.SysFont("Courier New", 14)
+        
         pygame.draw.rect(self.screen, (255, 200, 50), (0, 40, SCREEN_WIDTH, 50))
         title = font_title.render("WEIGH STATION MANIFEST", True, (20, 20, 20))
         self.screen.blit(title, (SCREEN_WIDTH//2 - title.get_width()//2, 55))
+        
         headers = f"{'PLATE ID':<15} {'ARRIVALS':<10} {'DEPARTURES':<10}"
         self.screen.blit(font_mono.render(headers, True, (255, 200, 50)), (SCREEN_WIDTH//2 - 150, 120))
         pygame.draw.line(self.screen, (255, 200, 50), (SCREEN_WIDTH//2 - 160, 135), (SCREEN_WIDTH//2 + 160, 135), 1)
+        
         report = self.logic.get_inventory_report()
         start_y = 150
         for i, item in enumerate(report):

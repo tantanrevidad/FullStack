@@ -1,14 +1,16 @@
-# Full_Stack_Sim/simulation/site_conveyor_list.py
-
 import pygame
 import random
 from settings import *
-from core.sprites import CrateSprite 
+from core.sprites import CrateSprite
 from core.ui import HandheldChassis, LCDDisplay, RoundButton
 
-# --- SPRITE (Unchanged) ---
 BOX_SIZES = { 'small': (40, 40), 'medium': (60, 50), 'large': (80, 60) }
+
 class BoxSprite(CrateSprite):
+    """
+    Represents a package on the conveyor belt.
+    Handles gravity physics for dropping from the hopper and bouncing on the belt.
+    """
     def __init__(self, x, y, data_label, size_type='medium'):
         self.size_type = size_type; self.width, self.height = BOX_SIZES[self.size_type]
         super().__init__(x, y, data_label)
@@ -16,7 +18,9 @@ class BoxSprite(CrateSprite):
         self.drop_speed = 0; self.gravity = 0.4; self.bounce_speed = -5; self.target_y_for_drop = 0
         self.drop_callback = None; self.original_image = self.generate_box_surface()
         self.image = self.original_image.copy(); self.rect = self.image.get_rect(center=(x, y))
+
     def generate_box_surface(self):
+        """Draws a cardboard box with tape and a label."""
         surf = pygame.Surface((self.width + 6, self.height + 6), pygame.SRCALPHA)
         pygame.draw.rect(surf, (0, 0, 0, 60), (5, 5, self.width, self.height), border_radius=4)
         box_rect = pygame.Rect(2, 2, self.width, self.height)
@@ -26,9 +30,13 @@ class BoxSprite(CrateSprite):
         label_w, label_h = self.label_surf.get_size()
         label_x = (surf.get_width() - label_w) / 2; label_y = (surf.get_height() - label_h) / 2
         surf.blit(self.label_surf, (label_x, label_y)); return surf
+
     def drop_to(self, target_y, callback):
+        """Initiates the drop animation."""
         self.is_dropping = True; self.target_y_for_drop = target_y; self.drop_callback = callback
+
     def update(self):
+        """Handles physics (drop/bounce) and linear movement."""
         if self.is_dropping:
             self.drop_speed += self.gravity; self.pos_y += self.drop_speed
             if self.pos_y >= self.target_y_for_drop: self.pos_y = self.target_y_for_drop; self.is_dropping = False; self.is_bouncing = True
@@ -48,12 +56,18 @@ class BoxSprite(CrateSprite):
             self.rect.center = (int(self.pos_x), int(self.pos_y))
         self.image = self.original_image
 
-# --- LOGIC LAYER (Unchanged) ---
 class Node:
+    """Standard Linked List Node."""
     def __init__(self, label): self.label = label; self.next = None
+
 class LinkedListManager:
+    """
+    Backend Logic for Singly Linked List.
+    Manages nodes and pointers, returning receipts for visualization.
+    """
     def __init__(self, capacity=10): self.head = None; self.size = 0; self.capacity = capacity
     def is_full(self): return self.size >= self.capacity
+    
     def insert_at(self, index, label):
         if self.is_full(): return {"type": "ERROR", "message": "CONVEYOR FULL"}
         if index < 0 or index > self.size: return {"type": "ERROR", "message": "INVALID INDEX"}
@@ -64,6 +78,7 @@ class LinkedListManager:
             for _ in range(index - 1): current = current.next
             new_node.next = current.next; current.next = new_node
         self.size += 1; return {"type": "INSERT", "label": label, "index": index}
+
     def remove_box(self, label):
         if not self.head: return [{"type": "ERROR", "message": "CONVEYOR EMPTY"}]
         if self.head.label == label:
@@ -75,6 +90,7 @@ class LinkedListManager:
             removed_node = current.next; current.next = removed_node.next; self.size -= 1
             return [{"type": "REMOVE", "label": removed_node.label, "index": index + 1}]
         return [{"type": "ERROR", "message": "NOT FOUND"}]
+
     def find_box(self, label):
         current = self.head
         while current:
@@ -82,20 +98,26 @@ class LinkedListManager:
             current = current.next
         return False
 
-# --- VISUALIZATION LAYER ---
 class ConveyorSimulation:
+    """
+    Visualization for Linked List.
+    Renders a conveyor belt and handles insertion/removal animations.
+    """
     def __init__(self, screen):
         self.screen = screen; self.logic = LinkedListManager(capacity=10)
         self.all_sprites = pygame.sprite.Group(); self.crates_group = pygame.sprite.Group()
         self.placement_mode = False; self.label_to_place = ""; self.placement_markers = []
+        
         self.ui_x = 750; self.ui_w = 250
         self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
         self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
         self.lcd.update_status("CONVEYOR OPS")
+        
         btn_cx = self.ui_x + self.ui_w // 2
         self.btn_append = RoundButton(btn_cx, 260, 40, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "APPEND", self.action_append)
         self.btn_insert = RoundButton(btn_cx, 350, 40, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "INSERT AT", self.action_insert_at)
         self.btn_remove = RoundButton(btn_cx, 440, 40, BTN_RED_BASE, BTN_RED_LIGHT, "REMOVE", self.action_remove)
+        
         self.visual_list = []; self.is_animating = False; self.animation_lock_count = 0
         self.BELT_Y = SCREEN_HEIGHT - 100; self.SIMULATION_WIDTH = 750
         self.HOPPER_X = self.SIMULATION_WIDTH / 2; self.HOPPER_Y = -100
@@ -118,8 +140,6 @@ class ConveyorSimulation:
             pygame.draw.rect(surf, BOX_COLOR_2, (bx, by, bw, bh))
 
     def _generate_static_background(self):
-        # --- DEFINITIVE FIX: Use a separate layer for transparent effects ---
-        # 1. Create the opaque base layer
         bg = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
         bg.fill(FLOOR_COLOR)
         for _ in range(15000):
@@ -140,8 +160,6 @@ class ConveyorSimulation:
         self._draw_shelf_unit(bg, 50, 250, 200, 250, 5)
         self._draw_shelf_unit(bg, 500, 250, 200, 250, 5)
         pygame.draw.rect(bg, (40, 45, 50), (0, 0, SCREEN_WIDTH, 80))
-        
-        # 2. Create a separate transparent layer for lights
         light_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         light_positions = []
         for i in range(0, SCREEN_WIDTH, 100):
@@ -151,8 +169,6 @@ class ConveyorSimulation:
         for lx, ly in light_positions:
             points = [(lx - 20, ly), (lx + 20, ly), (lx + 80, SCREEN_HEIGHT), (lx - 80, SCREEN_HEIGHT)]
             pygame.draw.polygon(light_layer, LIGHT_RAY_COLOR, points)
-        
-        # 3. Composite the layers together
         bg.blit(light_layer, (0, 0))
         return bg
 

@@ -3,21 +3,31 @@ import math
 import random
 from settings import *
 from core.ui import HandheldChassis, LCDDisplay, RoundButton, Button
+
 class Node:
+    """Node for Expression Tree."""
     def __init__(self, value):
         self.value = value
         self.left = None
         self.right = None
         self.x = 0; self.y = 0
         self.target_x = 0; self.target_y = 0
+
 class ExpressionTreeManager:
+    """
+    Backend Logic for Expression Tree.
+    Parses infix expressions to postfix and builds the tree.
+    """
     def __init__(self):
         self.root = None
         self.current_depth = 0
         self.precedence = {'+': 1, '-': 1, '*': 2, '/': 2, '^': 3}
+
     def _is_operator(self, char):
         return char in "+-*/^"
+
     def _infix_to_postfix(self, expression):
+        """Shunting-yard algorithm implementation."""
         stack = []; output = []
         for char in expression:
             if char.isalnum():
@@ -42,7 +52,9 @@ class ExpressionTreeManager:
         while stack:
             output.append(stack.pop())
         return output
+
     def build_from_expression(self, expression):
+        """Builds the tree from an infix string."""
         expression = "".join(filter(lambda x: not x.isspace(), expression))
         if not expression: return False
         try:
@@ -64,6 +76,7 @@ class ExpressionTreeManager:
             return True
         except (IndexError, Exception):
             return False
+
     def _get_label_from_index(self, n):
         label = ""
         if n < 0: return ""
@@ -73,7 +86,9 @@ class ExpressionTreeManager:
             if n < 0:
                 break
         return label
+
     def build_from_levels(self, num_levels):
+        """Generates a perfect binary tree of a given depth."""
         if not 1 <= num_levels <= 5: return False
         node_index = 0
         self.root = Node(self._get_label_from_index(node_index))
@@ -90,27 +105,34 @@ class ExpressionTreeManager:
                 queue.append(current.right)
         self.current_depth = num_levels - 1
         return True
+
     def _calculate_depth(self, node, depth):
         if node is None: return
         self.current_depth = max(self.current_depth, depth)
         self._calculate_depth(node.left, depth + 1)
         self._calculate_depth(node.right, depth + 1)
+
     def get_traversals(self):
         return {
             "TLR": self._get_pre_order(self.root),
             "LTR": self._get_in_order(self.root),
             "LRT": self._get_post_order(self.root)
         }
+
     def _get_pre_order(self, node):
         if not node: return []
         return [node] + self._get_pre_order(node.left) + self._get_pre_order(node.right)
+
     def _get_in_order(self, node):
         if not node: return []
         return self._get_in_order(node.left) + [node] + self._get_in_order(node.right)
+
     def _get_post_order(self, node):
         if not node: return []
         return self._get_post_order(node.left) + self._get_post_order(node.right) + [node]
+
 class DroneSprite(pygame.sprite.Sprite):
+    """Scanner drone for traversing the expression tree."""
     def __init__(self, x, y):
         super().__init__()
         self.pos_x = float(x); self.pos_y = float(y)
@@ -123,6 +145,7 @@ class DroneSprite(pygame.sprite.Sprite):
         self.image = pygame.Surface((1,1))
         self.rect = self.image.get_rect(center=(x,y))
         self.resize(40)
+
     def resize(self, size):
         s = int(size)
         if s < 15: s = 15
@@ -156,10 +179,12 @@ class DroneSprite(pygame.sprite.Sprite):
             end_x = center + math.cos(rad) * arm_length
             end_y = center + math.sin(rad) * arm_length
             pygame.draw.line(self.rotor_image, blade_color, (end_x - blade_length, end_y), (end_x + blade_length, end_y), 2)
+
     def move_to(self, target_pos, callback=None):
         self.target_x, self.target_y = target_pos
         self.on_finish_callback = callback
         self.is_moving = True
+
     def update(self):
         self.rotor_angle = (self.rotor_angle + 45) % 360
         if self.is_moving:
@@ -177,62 +202,61 @@ class DroneSprite(pygame.sprite.Sprite):
         rotor_rect = rotated_rotors.get_rect(center=self.image.get_rect().center)
         self.image.blit(rotated_rotors, rotor_rect)
         self.rect = self.image.get_rect(center=(int(self.pos_x), int(self.pos_y)))
+
 class ExpressionTreeSimulation:
+    """
+    Visualization for Expression Tree Module.
+    Renders the tree layout and handles parsing/traversal interactions.
+    """
     def __init__(self, screen):
         self.screen = screen
         self.logic = ExpressionTreeManager()
         self.all_sprites = pygame.sprite.Group()
+        
         self.ui_x = 750; self.ui_w = 250
         self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
         self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
         self.lcd.update_status("EXPRESSION PARSER")
+        
         btn_cx = self.ui_x + self.ui_w // 2
         gen_y = 280; btn_radius = 40; h_gap = 15
         self.btn_gen_levels = RoundButton(btn_cx - btn_radius - h_gap, gen_y, btn_radius, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "LEVELS", self.action_gen_levels)
         self.btn_gen_expr = RoundButton(btn_cx + btn_radius + h_gap, gen_y, btn_radius, BTN_ALT_GREEN_BASE, BTN_ALT_GREEN_LIGHT, "EXPR", self.action_gen_expr)
         self.btn_analyze = RoundButton(btn_cx, 390, 40, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "TRAVERSE", self.action_open_analysis_menu)
         self.btn_clear = RoundButton(btn_cx, 490, 40, BTN_RED_BASE, BTN_RED_LIGHT, "CLEAR", self.action_clear)
+        
         self.SIM_WIDTH = 750; self.TOP_MARGIN = 120; self.BOTTOM_MARGIN = 50
         self.ROOT_X = self.SIM_WIDTH // 2; self.current_node_size = 80; self.belt_offset = 0
         self.show_analysis_menu = False; self.manifest_data = None; self.pending_report_data = None
+        
         menu_btn_w, menu_btn_h = 200, 40; menu_cx = self.SIM_WIDTH // 2; menu_start_y = 250
         self.menu_btn_tlr = Button(menu_cx - menu_btn_w//2, menu_start_y, menu_btn_w, menu_btn_h, "TLR (Pre-Order)", lambda: self.action_traverse("TLR"))
         self.menu_btn_ltr = Button(menu_cx - menu_btn_w//2, menu_start_y + 50, menu_btn_w, menu_btn_h, "LTR (In-Order)", lambda: self.action_traverse("LTR"))
         self.menu_btn_lrt = Button(menu_cx - menu_btn_w//2, menu_start_y + 100, menu_btn_w, menu_btn_h, "LRT (Post-Order)", lambda: self.action_traverse("LRT"))
+        
         self.is_traversing = False; self.traversal_path = []; self.traversal_index = 0
         self.highlighted_node = None; self.highlight_timer = 0
         self.drone = DroneSprite(-50, -50); self.all_sprites.add(self.drone)
         self.bg_surface = self._generate_background()
 
     def _generate_background(self):
-        # --- CHANGE: Draw across the full SCREEN_WIDTH ---
         bg = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
         bg.fill(WALL_BASE_COLOR)
-        
-        # Far background shelves
         self._draw_shelf_unit(bg, 0, 100, SCREEN_WIDTH, SCREEN_HEIGHT / 2, 8, 25)
-        
-        # Pillars for depth
         for i in range(7):
             self._draw_pillar(bg, 50 + i * 150, 0, 20, SCREEN_HEIGHT)
-
-        # Floor
         floor_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        floor_surf.set_colorkey((0,0,0)) # Make black transparent
+        floor_surf.set_colorkey((0,0,0))
         for _ in range(15000):
             color = random.choice([CONCRETE_NOISE_1, CONCRETE_NOISE_2])
             floor_surf.set_at((random.randint(0, SCREEN_WIDTH - 1), random.randint(0, SCREEN_HEIGHT - 1)), color)
         bg.blit(floor_surf, (0, 0))
-        
-        # Ceiling and lights
         pygame.draw.rect(bg, (40,45,50), (0,0,SCREEN_WIDTH, 80))
         light_fixtures = []
         for i in range(0, SCREEN_WIDTH, 150):
             pygame.draw.rect(bg, (20,22,25), (i, 30, 100, 10))
             pygame.draw.rect(bg, FLUORESCENT_LIGHT, (i+2, 32, 96, 6))
             light_fixtures.append((i+50, 40))
-
-        # Lighting overlay for atmosphere
         light_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         for lx, ly in light_fixtures:
             points = [(lx - 30, ly), (lx + 30, ly), (lx + 100, SCREEN_HEIGHT), (lx - 100, SCREEN_HEIGHT)]
@@ -267,6 +291,7 @@ class ExpressionTreeSimulation:
         next_spread = width_spread / 2
         self._recalculate_layout(node.left, x - next_spread, y + level_height, level + 1, next_spread)
         self._recalculate_layout(node.right, x + next_spread, y + level_height, level + 1, next_spread)
+
     def _update_node_positions(self, node):
         if node is None: return
         dx = node.target_x - node.x; dy = node.target_y - node.y
@@ -275,6 +300,7 @@ class ExpressionTreeSimulation:
         else:
             node.x, node.y = node.target_x, node.target_y
         self._update_node_positions(node.left); self._update_node_positions(node.right)
+
     def draw_conveyor_line(self, start, end):
         dist = math.hypot(end[0]-start[0], end[1]-start[1])
         if dist == 0: return
@@ -293,6 +319,7 @@ class ExpressionTreeSimulation:
                     pygame.draw.line(self.screen, (60,60,65), (px1 - dx, py1 - dy), (px1 + dx, py1 + dy), 2)
         pygame.draw.line(self.screen, (90,95,100), points[0], points[3], 5)
         pygame.draw.line(self.screen, (90,95,100), points[1], points[2], 5)
+
     def draw_tree(self, node):
         if node is None: return
         if node.left:
@@ -310,12 +337,14 @@ class ExpressionTreeSimulation:
         font_size = max(14, int(s * 0.5)); font = pygame.font.SysFont("Impact", font_size)
         txt = font.render(str(node.value), True, (20, 20, 20))
         self.screen.blit(txt, (rect.centerx - txt.get_width()//2, rect.centery - txt.get_height()//2))
+
     def action_gen_levels(self):
         text = self.lcd.text
         if not text.isdigit() or not (1 <= int(text) <= 5):
             self.lcd.update_status("ERR: LVL 1-5 ONLY"); return
         if self.logic.build_from_levels(int(text)):
             self.manifest_data = None; self.lcd.update_status("TREE GENERATED"); self.lcd.text = ""
+
     def action_gen_expr(self):
         text = self.lcd.text.upper()
         if not text: self.lcd.update_status("ERR: NO INPUT"); return
@@ -323,12 +352,15 @@ class ExpressionTreeSimulation:
             self.manifest_data = None; self.lcd.update_status("EXPR PARSED"); self.lcd.text = ""
         else:
             self.lcd.update_status("ERR: INVALID EXPR")
+
     def action_clear(self):
         self.logic.root = None; self.manifest_data = None
         self.lcd.update_status("SYSTEM CLEARED"); self.lcd.text = ""
+
     def action_open_analysis_menu(self):
         if self.is_traversing or not self.logic.root: return
         self.show_analysis_menu = True
+
     def action_traverse(self, order_type):
         self.show_analysis_menu = False
         all_traversals = self.logic.get_traversals()
@@ -340,19 +372,23 @@ class ExpressionTreeSimulation:
         self.is_traversing = True; self.traversal_index = 0
         self.drone.pos_x, self.drone.pos_y = self.ROOT_X, 20
         self.lcd.update_status("ANALYZING..."); self.process_next_traversal_step()
+
     def process_next_traversal_step(self):
         if self.traversal_index >= len(self.traversal_path):
             self.on_traversal_complete(); return
         node_to_visit = self.traversal_path[self.traversal_index]
         self.drone.move_to((node_to_visit.x, node_to_visit.y), callback=self.on_drone_arrival)
+
     def on_drone_arrival(self):
         node = self.traversal_path[self.traversal_index]
         self.highlighted_node = node; self.highlight_timer = 20
         self.traversal_index += 1; self.process_next_traversal_step()
+
     def on_traversal_complete(self):
         self.is_traversing = False; self.traversal_path = []; self.traversal_index = 0
         self.drone.move_to((-50, -50)); self.lcd.update_status("ANALYSIS DONE")
         self.manifest_data = self.pending_report_data; self.pending_report_data = None
+
     def handle_events(self, event):
         if self.show_analysis_menu:
             self.menu_btn_tlr.handle_event(event); self.menu_btn_ltr.handle_event(event); self.menu_btn_lrt.handle_event(event)
@@ -365,6 +401,7 @@ class ExpressionTreeSimulation:
             return
         self.lcd.handle_event(event); self.btn_gen_levels.handle_event(event)
         self.btn_gen_expr.handle_event(event); self.btn_analyze.handle_event(event); self.btn_clear.handle_event(event)
+
     def update(self):
         if self.show_analysis_menu: return
         self.belt_offset = (self.belt_offset + 2) % 20
@@ -384,6 +421,7 @@ class ExpressionTreeSimulation:
             self._update_node_positions(self.logic.root)
             self.drone.resize(self.current_node_size * 0.8)
         self.all_sprites.update(); self.lcd.update()
+
     def draw_analysis_menu(self):
         overlay = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA); overlay.fill((0, 0, 0, 180))
         self.screen.blit(overlay, (0, 0))
@@ -391,6 +429,7 @@ class ExpressionTreeSimulation:
         title_surf = font_title.render("SELECT ANALYSIS METHOD", True, WHITE)
         self.screen.blit(title_surf, (self.SIM_WIDTH//2 - title_surf.get_width()//2, 180))
         self.menu_btn_tlr.draw(self.screen); self.menu_btn_ltr.draw(self.screen); self.menu_btn_lrt.draw(self.screen)
+
     def draw_manifest(self):
         overlay = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA); overlay.fill((0, 0, 0, 180))
         self.screen.blit(overlay, (0, 0))
@@ -422,6 +461,7 @@ class ExpressionTreeSimulation:
         font_prompt = pygame.font.SysFont("Arial", 12)
         prompt_surf = font_prompt.render("Click anywhere to dismiss", True, (150, 150, 150))
         self.screen.blit(prompt_surf, (x + w - prompt_surf.get_width() - 10, y + h - prompt_surf.get_height() - 10))
+
     def draw(self):
         self.screen.blit(self.bg_surface, (0, 0))
         self.draw_tree(self.logic.root)

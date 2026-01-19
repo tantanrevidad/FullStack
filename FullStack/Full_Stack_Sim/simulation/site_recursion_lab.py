@@ -3,19 +3,24 @@ import random
 from settings import *
 from core.ui import HandheldChassis, LCDDisplay, RoundButton, Button
 
-# --- LOGIC LAYER (UNCHANGED) ---
-
 class RecursionManager:
+    """
+    Backend Logic for Recursion (Tower of Hanoi).
+    Generates the sequence of moves to solve the puzzle.
+    """
     def __init__(self):
         self.num_disks = 0
 
     def generate_moves_from_current_state(self, num_disks, current_pegs, destination_peg):
+        """Calculates moves to solve Hanoi from an arbitrary state."""
         self.num_disks = num_disks
         moves = []
+        
         def find_disk(disk_val, pegs):
             for peg_name, disk_list in pegs.items():
                 if disk_val in disk_list: return peg_name
             return None
+            
         def _solve(n, dest):
             if n == 0: return
             src = find_disk(n, current_pegs)
@@ -28,12 +33,12 @@ class RecursionManager:
                 current_pegs[src].remove(n)
                 current_pegs[dest].append(n)
                 _solve(n - 1, dest)
+                
         _solve(num_disks, destination_peg)
         return moves
 
-# --- VISUALIZATION LAYER (UNCHANGED SPRITES) ---
-
 class DiskSprite(pygame.sprite.Sprite):
+    """Visual representation of a Hanoi disk."""
     def __init__(self, value, max_value, height, color):
         super().__init__()
         self.value = value
@@ -125,6 +130,9 @@ class DiskSprite(pygame.sprite.Sprite):
         self.rect.midbottom = (int(self.pos_x), int(self.pos_y))
 
 class MagneticCraneSprite(pygame.sprite.Sprite):
+    """
+    Animated crane that moves horizontally and hoists disks vertically.
+    """
     def __init__(self, x, y):
         super().__init__()
         self.trolley_width, self.trolley_height = 80, 25
@@ -192,9 +200,11 @@ class MagneticCraneSprite(pygame.sprite.Sprite):
             self.image = self._create_surface()
             self.rect = self.image.get_rect(midtop=(int(self.pos_x), int(self.pos_y)))
 
-# --- SIMULATION CLASS (CONTROLLER) ---
-
 class RecursionSimulation:
+    """
+    Visualization for Recursion Module.
+    Renders the Tower of Hanoi setup and manages crane animations.
+    """
     def __init__(self, screen):
         self.screen = screen; self.logic = RecursionManager()
         self.SIM_WIDTH = 750; self.FLOOR_Y = SCREEN_HEIGHT - 80
@@ -203,13 +213,16 @@ class RecursionSimulation:
         self.all_sprites = pygame.sprite.Group(); self.disks = pygame.sprite.Group()
         self.crane = MagneticCraneSprite(self.SIM_WIDTH / 2, self.TRAVEL_Y)
         self.all_sprites.add(self.crane)
+        
         self.ui_x = 750; self.ui_w = 250
         self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
         self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
+        
         btn_cx = self.ui_x + self.ui_w // 2
         self.btn_load = RoundButton(btn_cx, 280, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "LOAD", self.action_load)
         self.btn_solve = RoundButton(btn_cx, 390, 45, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "SOLVE", self.action_solve)
         self.btn_reset = RoundButton(btn_cx, 500, 45, BTN_RED_BASE, BTN_RED_LIGHT, "RESET", self.action_reset)
+        
         self.game_state = 'IDLE'; self.selected_disk = None; self.source_peg = None
         self.move_count = 0; self.auto_solve_queue = []; self.show_win_manifest = False
         self.disks_to_load = []
@@ -291,7 +304,6 @@ class RecursionSimulation:
         disk.pos_y = -50
         self.all_sprites.add(disk); self.disks.add(disk)
         def on_drop_complete():
-            # BUG FIX: Use append to build the stack from bottom to top
             self.visual_pegs['A'].append(disk)
             self.animate_next_disk_drop()
         disk.drop_to((config['target_x'], config['target_y']), on_drop_complete)

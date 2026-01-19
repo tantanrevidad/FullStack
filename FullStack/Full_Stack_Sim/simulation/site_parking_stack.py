@@ -5,41 +5,75 @@ from core.sprites import CrateSprite
 from core.ui import HandheldChassis, LCDDisplay, RoundButton
 
 class Vehicle:
+    """Data model for a vehicle in the stack."""
     def __init__(self, plate, arrival_count, departure_count):
-        self.plate = plate; self.arrival_count = arrival_count; self.departure_count = departure_count
+        self.plate = plate
+        self.arrival_count = arrival_count
+        self.departure_count = departure_count
 
 class StackManager:
+    """
+    Backend Logic for LIFO (Last-In, First-Out) Stack.
+    Manages the list of vehicles and generates event logs for the visualization.
+    """
     def __init__(self, capacity=10):
-        self.items = []; self.capacity = capacity; self.history = {}
+        self.items = []
+        self.capacity = capacity
+        self.history = {}
+
     def _get_stats(self, plate):
         if plate not in self.history: self.history[plate] = {'arrivals': 0, 'departures': 0}
         return self.history[plate]
+
     def push(self, plate):
+        """Adds a vehicle to the top of the stack."""
         if len(self.items) >= self.capacity: return {"type": "OVERFLOW", "message": "BAY FULL"}
         if any(v.plate == plate for v in self.items): return {"type": "DUPLICATE", "message": "ALREADY HERE"}
-        stats = self._get_stats(plate); stats['arrivals'] += 1
+        
+        stats = self._get_stats(plate)
+        stats['arrivals'] += 1
         new_vehicle = Vehicle(plate, stats['arrivals'], stats['departures'])
         self.items.append(new_vehicle)
         return {"type": "PUSH", "index": len(self.items) - 1, "data": new_vehicle}
+
     def remove_vehicle(self, plate):
+        """
+        Removes a specific vehicle.
+        If the vehicle is not at the top, generates 'TEMP_POP' events for items above it.
+        """
         target_index = -1
         for i, v in enumerate(self.items):
             if v.plate == plate: target_index = i; break
         if target_index == -1: return [{"type": "ERROR", "message": "NOT FOUND"}]
-        events = []; current_top_index = len(self.items) - 1; temp_holding = []
+        
+        events = []
+        current_top_index = len(self.items) - 1
+        temp_holding = []
+        
+        # Pop items above target
         while len(self.items) > target_index + 1:
-            v = self.items.pop(); temp_holding.append(v)
-            stats = self._get_stats(v.plate); stats['departures'] += 1
+            v = self.items.pop()
+            temp_holding.append(v)
+            stats = self._get_stats(v.plate)
+            stats['departures'] += 1
             events.append({"type": "TEMP_POP", "data": v, "index": current_top_index})
             current_top_index -= 1
+            
+        # Pop target
         target_vehicle = self.items.pop()
-        stats = self._get_stats(target_vehicle.plate); stats['departures'] += 1
+        stats = self._get_stats(target_vehicle.plate)
+        stats['departures'] += 1
         events.append({"type": "FINAL_POP", "data": target_vehicle, "index": target_index, "stats": stats})
+        
+        # Push items back
         for v in reversed(temp_holding):
             self.items.append(v)
-            stats = self._get_stats(v.plate); stats['arrivals'] += 1
+            stats = self._get_stats(v.plate)
+            stats['arrivals'] += 1
             events.append({"type": "RESTACK_PUSH", "data": v, "index": len(self.items) - 1})
+            
         return events
+
     def get_inventory_report(self):
         report = []
         for v in self.items:
@@ -48,9 +82,17 @@ class StackManager:
         return report
 
 class ParkingStackSimulation:
+    """
+    Visualization for the Stack Module.
+    Renders the vertical parking bay and handles sprite animations based on StackManager events.
+    """
     def __init__(self, screen):
-        self.screen = screen; self.logic = StackManager(capacity=10)
-        self.all_sprites = pygame.sprite.Group(); self.crates_group = pygame.sprite.Group()
+        self.screen = screen
+        self.logic = StackManager(capacity=10)
+        self.all_sprites = pygame.sprite.Group()
+        self.crates_group = pygame.sprite.Group()
+        
+        # UI Setup
         self.ui_x = 750; self.ui_y = 0; self.ui_w = 250; self.ui_h = SCREEN_HEIGHT
         self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
         self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
@@ -62,9 +104,12 @@ class ParkingStackSimulation:
         self.btn_summary = RoundButton(btn_cx, 500, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "SUMMARY", self.action_summary)
         self.btn_skip = RoundButton(btn_cx, 590, 30, (100, 100, 100), (150, 150, 150), "SKIP", self.action_skip)
         
-        self.visual_stack = []; self.holding_stack_height = 0
-        self.last_receipt = None; self.event_queue = []
-        self.is_animating = False; self.show_summary = False
+        self.visual_stack = []
+        self.holding_stack_height = 0
+        self.last_receipt = None
+        self.event_queue = []
+        self.is_animating = False
+        self.show_summary = False
 
     def draw_pallet(self, x, y, boxes=2):
         pygame.draw.rect(self.screen, (100, 80, 50), (x, y, 30, 20))
@@ -84,23 +129,33 @@ class ParkingStackSimulation:
         for _ in range(5000):
             color = ASPHALT_STACK_NOISE
             self.screen.set_at((random.randint(0, 749), random.randint(0, SCREEN_HEIGHT-1)), color)
+            
+        # Walls
         wall_h = 80
         for x in range(0, 750, 10):
             color = WALL_CORRUGATED_DARK if (x // 10) % 2 == 0 else WALL_CORRUGATED_LIGHT
             pygame.draw.rect(self.screen, color, (x, 0, 10, wall_h))
         pygame.draw.rect(self.screen, (20,22,25), (0, wall_h, 750, 10))
+        
+        # Control Room
         office_rect = pygame.Rect(325, 20, 150, 60)
         pygame.draw.rect(self.screen, (30,35,40), office_rect, border_radius=5)
         glow_surf = pygame.Surface((130, 40), pygame.SRCALPHA)
         glow_surf.fill(CONTROL_ROOM_GLOW)
         self.screen.blit(glow_surf, (335, 30))
         pygame.draw.rect(self.screen, (100, 110, 120), office_rect, 2, border_radius=5)
-        font = pygame.font.SysFont("Arial", 8); self.screen.blit(font.render("CONTROL", True, (150, 160, 170)), (375, 22))
+        font = pygame.font.SysFont("Arial", 8)
+        self.screen.blit(font.render("CONTROL", True, (150, 160, 170)), (375, 22))
+        
+        # Vents
         for x in [50, 150, 550, 650]:
             pygame.draw.rect(self.screen, (20, 22, 25), (x, 30, 60, 30))
             pygame.draw.rect(self.screen, (10, 12, 15), (x+5, 35, 50, 20))
+            
+        # Lane Markings
         pygame.draw.line(self.screen, STRIPE_YELLOW, (250, 100), (250, SCREEN_HEIGHT), 2)
         pygame.draw.line(self.screen, STRIPE_YELLOW, (500, 100), (500, SCREEN_HEIGHT), 2)
+        
         slot_height = CRATE_WIDTH + PARKING_GAP
         for i in range(10):
             y = STACK_ZONE_BASE_Y - (i * slot_height)
@@ -114,12 +169,17 @@ class ParkingStackSimulation:
             pygame.draw.line(self.screen, col, slot_rect.topright, (slot_rect.right, slot_rect.top + c_len), 2)
             pygame.draw.line(self.screen, col, (slot_rect.right, slot_rect.bottom - c_len), (slot_rect.right, slot_rect.bottom), 2)
             pygame.draw.line(self.screen, col, (slot_rect.right - c_len//2, slot_rect.bottom), (slot_rect.right + c_len//2, slot_rect.bottom), 2)
+            
             num_font = pygame.font.SysFont("Arial", 10, bold=True)
             self.screen.blit(num_font.render(str(i+1), True, (150, 150, 160)), (slot_rect.right + 15, slot_rect.centery - 5))
+            
+        # Holding Zone
         for i in range(10):
             y = HOLDING_ZONE_Y - (i * slot_height)
             slot_rect = pygame.Rect(HOLDING_ZONE_X - 10, y - CRATE_WIDTH//2, CRATE_HEIGHT + 20, CRATE_WIDTH + 10)
             pygame.draw.rect(self.screen, STRIPE_YELLOW, slot_rect, 1)
+            
+        # Labels
         font = pygame.font.SysFont("Impact", 18)
         text_surf = font.render("MAINTENANCE BAY", True, STENCIL_TEXT_COLOR)
         text_surf = pygame.transform.rotate(text_surf, 90)
@@ -127,6 +187,8 @@ class ParkingStackSimulation:
         text_surf = font.render("TEMP PARKING", True, STENCIL_TEXT_COLOR)
         text_surf = pygame.transform.rotate(text_surf, 90)
         self.screen.blit(text_surf, (HOLDING_ZONE_X + 130, 380))
+        
+        # Props
         self.draw_pallet(20, 120, boxes=1); self.draw_pallet(60, 120, boxes=2)
         self.draw_pallet(20, 160, boxes=2); self.draw_vent(100, 130)
         self.draw_pallet(680, 120, boxes=2); self.draw_pallet(680, 160, boxes=1)
@@ -141,16 +203,27 @@ class ParkingStackSimulation:
         if self.is_animating or self.show_summary: return
         plate = self.lcd.text.upper()
         if not plate: self.lcd.update_status("ERR: NO INPUT"); return
+        
         receipt = self.logic.push(plate)
-        if receipt['type'] in ['OVERFLOW', 'DUPLICATE']: self.lcd.update_status(f"ERR: {receipt['message']}"); return
-        self.lcd.update_status(f"IN: {plate}"); self.lcd.text = ""
+        if receipt['type'] in ['OVERFLOW', 'DUPLICATE']: 
+            self.lcd.update_status(f"ERR: {receipt['message']}")
+            return
+            
+        self.lcd.update_status(f"IN: {plate}")
+        self.lcd.text = ""
+        
         new_crate = CrateSprite(SPAWN_X, SPAWN_Y, receipt['data'].plate)
-        self.all_sprites.add(new_crate); self.crates_group.add(new_crate)
+        self.all_sprites.add(new_crate)
+        self.crates_group.add(new_crate)
         self.visual_stack.append(new_crate)
+        
         slot_height = CRATE_WIDTH + PARKING_GAP
         stack_target_y = STACK_ZONE_BASE_Y - (receipt['index'] * slot_height)
         stack_target = (STACK_ZONE_X + CRATE_HEIGHT/2, stack_target_y)
-        def drive_to_stack(): new_crate.move_to(stack_target, callback=lambda: self._force_park_orientation(new_crate))
+        
+        def drive_to_stack(): 
+            new_crate.move_to(stack_target, callback=lambda: self._force_park_orientation(new_crate))
+            
         self.is_animating = True
         new_crate.move_to((RECEIVING_BAY_X, RECEIVING_BAY_Y), callback=drive_to_stack)
 
@@ -158,47 +231,39 @@ class ParkingStackSimulation:
         if self.is_animating or self.show_summary: return
         plate = self.lcd.text.upper()
         if not plate: return
+        
         events = self.logic.remove_vehicle(plate)
-        if events[0]['type'] == 'ERROR': self.lcd.update_status(f"ERR: {events[0]['message']}"); return
-        self.lcd.update_status(f"OUT: {plate}"); self.lcd.text = ""
-        self.event_queue = events; self.is_animating = True
+        if events[0]['type'] == 'ERROR': 
+            self.lcd.update_status(f"ERR: {events[0]['message']}")
+            return
+            
+        self.lcd.update_status(f"OUT: {plate}")
+        self.lcd.text = ""
+        self.event_queue = events
+        self.is_animating = True
         self.process_next_event()
 
     def action_skip(self):
+        """Resets the simulation state to match the logic state instantly."""
         if not self.is_animating: return
-        
-        # 1. Stop all movement and clear events
         self.event_queue = []
-        
-        # 2. HARD RESET: Clear all existing sprites to prevent duplication/clumping
-        for s in self.crates_group:
-            s.kill()
+        for s in self.crates_group: s.kill()
         self.visual_stack = []
         
-        # 3. Regenerate sprites from Logic State (Source of Truth)
         slot_height = CRATE_WIDTH + PARKING_GAP
-        
         for i, vehicle in enumerate(self.logic.items):
-            # Create fresh sprite
             new_sprite = CrateSprite(0, 0, vehicle.plate)
-            
-            # Calculate exact position
             target_y = STACK_ZONE_BASE_Y - (i * slot_height)
             new_sprite.pos_x = STACK_ZONE_X + CRATE_HEIGHT/2
             new_sprite.pos_y = target_y
-            
-            # Force orientation and position
             new_sprite.rect.center = (int(new_sprite.pos_x), int(new_sprite.pos_y))
             new_sprite.angle = 0
             new_sprite.image = pygame.transform.rotate(new_sprite.original_image, 0)
             new_sprite.is_moving = False
-            
-            # Add to groups
             self.all_sprites.add(new_sprite)
             self.crates_group.add(new_sprite)
             self.visual_stack.append(new_sprite)
             
-        # 4. Reset State
         self.holding_stack_height = 0
         self.is_animating = False
         self.lcd.update_status("READY")
@@ -207,6 +272,7 @@ class ParkingStackSimulation:
         if not self.event_queue: self.on_animation_complete(); return
         event = self.event_queue.pop(0)
         slot_height = CRATE_WIDTH + PARKING_GAP
+        
         if event['type'] == 'TEMP_POP':
             if self.visual_stack:
                 crate = self.visual_stack.pop()
@@ -214,13 +280,16 @@ class ParkingStackSimulation:
                 self.holding_stack_height += 1
                 crate.move_to((HOLDING_ZONE_X + CRATE_HEIGHT/2, target_y), callback=lambda: self._force_park_orientation(crate))
             else: self.process_next_event()
+            
         elif event['type'] == 'FINAL_POP':
             if self.visual_stack:
                 crate = self.visual_stack.pop()
-                self.last_receipt = event['stats']; self.last_receipt['plate'] = event['data'].plate
+                self.last_receipt = event['stats']
+                self.last_receipt['plate'] = event['data'].plate
                 def cleanup(): crate.kill(); self.process_next_event()
                 crate.move_to((SHIPPING_BAY_X, SHIPPING_BAY_Y), callback=cleanup)
             else: self.process_next_event()
+            
         elif event['type'] == 'RESTACK_PUSH':
             sprite_to_move = next((s for s in self.crates_group if hasattr(s, 'plate') and s.plate == event['data'].plate), None)
             if sprite_to_move:

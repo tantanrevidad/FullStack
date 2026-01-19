@@ -25,7 +25,6 @@ COLOR_WALL_LIGHT = (60, 65, 70)
 COLOR_ROOF_BASE = (30, 35, 40)
 
 class IndustrialLabel:
-    """A rugged, high-contrast label for facilities."""
     def __init__(self, x, y, title, subtitle):
         self.x = x
         self.y = y

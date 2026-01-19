@@ -6,6 +6,7 @@ from core.sprites import CrateSprite
 from core.ui import HandheldChassis, LCDDisplay, RoundButton, Button
 
 class BSTNode:
+    """Node structure for the Binary Search Tree."""
     def __init__(self, value):
         self.value = value
         self.left = None
@@ -14,13 +15,23 @@ class BSTNode:
         self.target_x = 0; self.target_y = 0
         self.push_arm_state = 'idle'
         self.push_arm_timer = 0
+
 class BSTManager:
+    """
+    Backend Logic for Binary Search Tree.
+    Handles insertion logic and generates traversal paths (In/Pre/Post-order).
+    """
     def __init__(self):
         self.root = None
         self.nodes_count = 0
         self.max_allowed_depth = 5
         self.current_depth = 0
+
     def insert(self, value):
+        """
+        Inserts a value into the BST.
+        Returns a receipt containing the path nodes for visualization.
+        """
         if self.root is None:
             self.root = BSTNode(value)
             self.nodes_count += 1
@@ -54,38 +65,49 @@ class BSTManager:
                     }
                 current = current.right
             depth += 1
+
     def clear(self):
         self.root = None
         self.nodes_count = 0
         self.current_depth = 0
+
     def in_order(self):
         result = []
         self._in_order_recursive(self.root, result)
         return result
+
     def _in_order_recursive(self, node, result):
         if node:
             self._in_order_recursive(node.left, result)
             result.append(node)
             self._in_order_recursive(node.right, result)
+
     def pre_order(self):
         result = []
         self._pre_order_recursive(self.root, result)
         return result
+
     def _pre_order_recursive(self, node, result):
         if node:
             result.append(node)
             self._pre_order_recursive(node.left, result)
             self._pre_order_recursive(node.right, result)
+
     def post_order(self):
         result = []
         self._post_order_recursive(self.root, result)
         return result
+
     def _post_order_recursive(self, node, result):
         if node:
             self._post_order_recursive(node.left, result)
             self._post_order_recursive(node.right, result)
             result.append(node)
+
 class PackageSprite(pygame.sprite.Sprite):
+    """
+    Represents a data packet traveling through the routing nodes.
+    """
     def __init__(self, start_x, start_y, value, size=30):
         super().__init__()
         self.value = value
@@ -100,6 +122,7 @@ class PackageSprite(pygame.sprite.Sprite):
         self.attached_node = None
         self.resize(size)
         self.rect = self.image.get_rect(center=(start_x, start_y))
+
     def resize(self, size):
         s = int(size)
         if s < 10: s = 10
@@ -117,14 +140,17 @@ class PackageSprite(pygame.sprite.Sprite):
         pygame.draw.line(self.image, BOX_TAPE, (half, 0), (half, s), tape_w)
         pygame.draw.line(self.image, BOX_TAPE, (0, half), (s, half), tape_w)
         self.rect = self.image.get_rect(center=(int(self.pos_x), int(self.pos_y)))
+
     def add_path(self, nodes):
         self.path_queue.extend(nodes)
         if not self.is_moving and self.path_queue:
             self._start_next_leg()
+
     def _start_next_leg(self):
         if not self.path_queue: return
         self.target_node = self.path_queue.pop(0)
         self.is_moving = True
+
     def update(self):
         if self.attached_node:
             self.pos_x = self.attached_node.x
@@ -132,13 +158,16 @@ class PackageSprite(pygame.sprite.Sprite):
             self.rect.center = (int(self.pos_x), int(self.pos_y))
             return
         if not self.is_moving or not self.target_node: return
+        
         tx, ty = self.target_node.x, self.target_node.y
         dx = tx - self.pos_x
         dy = ty - self.pos_y
         dist = math.sqrt(dx**2 + dy**2)
+        
         if dist < MIN_SPEED:
             self.pos_x, self.pos_y = tx, ty
             if self.path_queue:
+                # Trigger diverter arm animation on the node
                 if self.target_node.left or self.target_node.right:
                     next_node = self.path_queue[0]
                     if next_node.value <= self.target_node.value:
@@ -159,7 +188,11 @@ class PackageSprite(pygame.sprite.Sprite):
             self.pos_x += dx * LERP_FACTOR
             self.pos_y += dy * LERP_FACTOR
         self.rect.center = (int(self.pos_x), int(self.pos_y))
+
 class DroneSprite(pygame.sprite.Sprite):
+    """
+    Animated drone used to visualize tree traversal algorithms.
+    """
     def __init__(self, x, y):
         super().__init__()
         self.pos_x = float(x); self.pos_y = float(y)
@@ -172,6 +205,7 @@ class DroneSprite(pygame.sprite.Sprite):
         self.image = pygame.Surface((1,1))
         self.rect = self.image.get_rect(center=(x,y))
         self.resize(40)
+
     def resize(self, size):
         s = int(size)
         if s < 15: s = 15
@@ -182,21 +216,29 @@ class DroneSprite(pygame.sprite.Sprite):
         chassis_radius = s * 0.25
         arm_length = s * 0.5
         rotor_radius = s * 0.12
+        
+        # Arms
         arm_color = (80, 85, 90)
         pygame.draw.line(self.original_image, arm_color, (center, center), (center - arm_length, center - arm_length), 3)
         pygame.draw.line(self.original_image, arm_color, (center, center), (center + arm_length, center - arm_length), 3)
         pygame.draw.line(self.original_image, arm_color, (center, center), (center - arm_length, center + arm_length), 3)
         pygame.draw.line(self.original_image, arm_color, (center, center), (center + arm_length, center + arm_length), 3)
+        
+        # Rotors
         pod_color = (50, 55, 60)
         pygame.draw.circle(self.original_image, pod_color, (center - arm_length, center - arm_length), rotor_radius)
         pygame.draw.circle(self.original_image, pod_color, (center + arm_length, center - arm_length), rotor_radius)
         pygame.draw.circle(self.original_image, pod_color, (center - arm_length, center + arm_length), rotor_radius)
         pygame.draw.circle(self.original_image, pod_color, (center + arm_length, center + arm_length), rotor_radius)
+        
+        # Body
         pygame.draw.circle(self.original_image, (0,0,0,80), (center+2, center+2), chassis_radius)
         pygame.draw.circle(self.original_image, (180,185,190), (center, center), chassis_radius)
         pygame.draw.circle(self.original_image, (100,105,110), (center, center), chassis_radius, 1)
         pygame.draw.circle(self.original_image, (255, 80, 80), (center, center), chassis_radius * 0.5)
         pygame.draw.circle(self.original_image, (255, 150, 150), (center-1, center-1), chassis_radius * 0.2)
+        
+        # Blades
         self.rotor_image = pygame.Surface((s,s), pygame.SRCALPHA)
         blade_color = (50,55,60,180)
         blade_length = rotor_radius * 1.5
@@ -205,10 +247,12 @@ class DroneSprite(pygame.sprite.Sprite):
             end_x = center + math.cos(rad) * arm_length
             end_y = center + math.sin(rad) * arm_length
             pygame.draw.line(self.rotor_image, blade_color, (end_x - blade_length, end_y), (end_x + blade_length, end_y), 2)
+
     def move_to(self, target_pos, callback=None):
         self.target_x, self.target_y = target_pos
         self.on_finish_callback = callback
         self.is_moving = True
+
     def update(self):
         self.rotor_angle = (self.rotor_angle + 45) % 360
         if self.is_moving:
@@ -226,70 +270,67 @@ class DroneSprite(pygame.sprite.Sprite):
         rotor_rect = rotated_rotors.get_rect(center=self.image.get_rect().center)
         self.image.blit(rotated_rotors, rotor_rect)
         self.rect = self.image.get_rect(center=(int(self.pos_x), int(self.pos_y)))
+
 class RouterTreeSimulation:
+    """
+    Visualization for the BST Module.
+    Renders the warehouse floor, tree nodes, and manages package/drone sprites.
+    """
     def __init__(self, screen):
         self.screen = screen
         self.logic = BSTManager()
         self.packages_group = pygame.sprite.Group()
         self.drone = DroneSprite(-50, -50)
         self.drone_group = pygame.sprite.GroupSingle(self.drone)
+        
         self.ui_x = 750; self.ui_w = 250
         self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
         self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
         self.lcd.update_status("ROUTING SYSTEM")
+        
         btn_cx = self.ui_x + self.ui_w // 2
         self.btn_insert = RoundButton(btn_cx, 280, 45, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "INJECT", self.action_insert)
         self.btn_reset = RoundButton(btn_cx, 390, 45, BTN_RED_BASE, BTN_RED_LIGHT, "CLEAR", self.action_reset)
         self.btn_scan = RoundButton(btn_cx, 500, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "TRAVERSE", self.action_open_traversal_menu)
+        
         self.is_animating = False
         self.SIM_WIDTH = 750; self.TOP_MARGIN = 120; self.BOTTOM_MARGIN = 50
         self.ROOT_X = self.SIM_WIDTH // 2
         self.target_node_size = 80; self.current_node_size = 80; self.belt_offset = 0
         self.bg_surface = self._generate_background()
+        
         self.show_traversal_menu = False; self.traversal_result_data = None; self.pending_report_data = None
         menu_btn_w, menu_btn_h = 200, 40; menu_cx = self.SIM_WIDTH // 2; menu_start_y = 250
         self.menu_btn_in = Button(menu_cx - menu_btn_w//2, menu_start_y, menu_btn_w, menu_btn_h, "In-Order Traversal", lambda: self.action_traverse("IN"))
         self.menu_btn_pre = Button(menu_cx - menu_btn_w//2, menu_start_y + 50, menu_btn_w, menu_btn_h, "Pre-Order Traversal", lambda: self.action_traverse("PRE"))
         self.menu_btn_post = Button(menu_cx - menu_btn_w//2, menu_start_y + 100, menu_btn_w, menu_btn_h, "Post-Order Traversal", lambda: self.action_traverse("POST"))
+        
         self.is_traversing = False; self.traversal_path = []; self.traversal_index = 0
         self.highlighted_node = None; self.highlight_timer = 0
 
     def _generate_background(self):
-        # --- CHANGE: Draw across the full SCREEN_WIDTH ---
         bg = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
         bg.fill(WALL_BASE_COLOR)
-        
-        # Far background shelves
         self._draw_shelf_unit(bg, 0, 100, SCREEN_WIDTH, SCREEN_HEIGHT / 2, 8, 25)
-        
-        # Pillars for depth
         for i in range(7):
             self._draw_pillar(bg, 50 + i * 150, 0, 20, SCREEN_HEIGHT)
-
-        # Floor
         floor_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        floor_surf.set_colorkey((0,0,0)) # Make black transparent
+        floor_surf.set_colorkey((0,0,0))
         for _ in range(15000):
             color = random.choice([CONCRETE_NOISE_1, CONCRETE_NOISE_2])
             floor_surf.set_at((random.randint(0, SCREEN_WIDTH - 1), random.randint(0, SCREEN_HEIGHT - 1)), color)
         bg.blit(floor_surf, (0, 0))
-        
-        # Ceiling and lights
         pygame.draw.rect(bg, (40,45,50), (0,0,SCREEN_WIDTH, 80))
         light_fixtures = []
         for i in range(0, SCREEN_WIDTH, 150):
             pygame.draw.rect(bg, (20,22,25), (i, 30, 100, 10))
             pygame.draw.rect(bg, FLUORESCENT_LIGHT, (i+2, 32, 96, 6))
             light_fixtures.append((i+50, 40))
-
-        # Bay Door
         door_w, door_h = 150, 30; door_x = self.SIM_WIDTH // 2 - door_w // 2
         pygame.draw.rect(bg, (40,40,40), (door_x, 0, door_w, door_h))
         for i in range(0, door_w, 15):
             pygame.draw.line(bg, (60,60,60), (door_x + i, 0), (door_x + i, door_h), 1)
         pygame.draw.rect(bg, STRIPE_YELLOW, (door_x, 0, door_w, door_h), 3)
-
-        # Lighting overlay for atmosphere
         light_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         for lx, ly in light_fixtures:
             points = [(lx - 30, ly), (lx + 30, ly), (lx + 100, SCREEN_HEIGHT), (lx - 100, SCREEN_HEIGHT)]
@@ -324,6 +365,7 @@ class RouterTreeSimulation:
         next_spread = width_spread / 2
         self._recalculate_layout(node.left, x - next_spread, y + level_height, level + 1, next_spread)
         self._recalculate_layout(node.right, x + next_spread, y + level_height, level + 1, next_spread)
+
     def _update_node_positions(self, node):
         if node is None: return
         dx = node.target_x - node.x; dy = node.target_y - node.y
@@ -336,6 +378,7 @@ class RouterTreeSimulation:
             if node.push_arm_timer == 0:
                 node.push_arm_state = 'idle'
         self._update_node_positions(node.left); self._update_node_positions(node.right)
+
     def draw_conveyor_line(self, start, end):
         dist = math.hypot(end[0]-start[0], end[1]-start[1])
         if dist == 0: return
@@ -354,6 +397,7 @@ class RouterTreeSimulation:
                     pygame.draw.line(self.screen, (60,60,65), (px1 - dx, py1 - dy), (px1 + dx, py1 + dy), 2)
         pygame.draw.line(self.screen, (90,95,100), points[0], points[3], 5)
         pygame.draw.line(self.screen, (90,95,100), points[1], points[2], 5)
+
     def draw_tree_nodes_and_labels(self, node):
         if node is None: return
         if node.left:
@@ -375,6 +419,7 @@ class RouterTreeSimulation:
         font_size = max(14, int(s * 0.5)); font = pygame.font.SysFont("Impact", font_size)
         txt = font.render(str(node.value), True, (20, 20, 20))
         self.screen.blit(txt, (rect.centerx - txt.get_width()//2, rect.centery - txt.get_height()//2))
+
     def action_insert(self):
         if self.is_animating or self.is_traversing: return
         text = self.lcd.text
@@ -395,16 +440,20 @@ class RouterTreeSimulation:
         if receipt['type'] != 'ROOT':
             path_nodes.extend(receipt['path_nodes']); path_nodes.append(receipt['node'])
         pkg.final_callback = self.on_animation_complete; pkg.add_path(path_nodes)
+
     def action_reset(self):
         if self.is_traversing: return
         self.logic.clear(); self.packages_group.empty()
         self.drone.move_to((-50, -50))
         self.is_animating = False; self.lcd.update_status("SYSTEM FLUSHED")
+
     def on_animation_complete(self):
         self.is_animating = False; self.lcd.update_status("READY")
+
     def action_open_traversal_menu(self):
         if self.is_animating or self.is_traversing or not self.logic.root: return
         self.show_traversal_menu = True
+
     def action_traverse(self, order_type):
         self.show_traversal_menu = False
         path = []; title = ""
@@ -416,19 +465,23 @@ class RouterTreeSimulation:
         self.is_traversing = True; self.traversal_index = 0
         self.drone.pos_x, self.drone.pos_y = self.ROOT_X, 20
         self.lcd.update_status("SCANNING..."); self.process_next_traversal_step()
+
     def process_next_traversal_step(self):
         if self.traversal_index >= len(self.traversal_path):
             self.on_traversal_complete(); return
         node_to_visit = self.traversal_path[self.traversal_index]
         self.drone.move_to((node_to_visit.x, node_to_visit.y), callback=self.on_drone_arrival)
+
     def on_drone_arrival(self):
         node = self.traversal_path[self.traversal_index]
         self.highlighted_node = node; self.highlight_timer = 20
         self.traversal_index += 1; self.process_next_traversal_step()
+
     def on_traversal_complete(self):
         self.is_traversing = False; self.traversal_path = []; self.traversal_index = 0
         self.drone.move_to((-50, -50)); self.lcd.update_status("SCAN COMPLETE")
         self.traversal_result_data = self.pending_report_data; self.pending_report_data = None
+
     def handle_events(self, event):
         if self.show_traversal_menu:
             self.menu_btn_in.handle_event(event); self.menu_btn_pre.handle_event(event); self.menu_btn_post.handle_event(event)
@@ -441,6 +494,7 @@ class RouterTreeSimulation:
             return
         self.lcd.handle_event(event); self.btn_insert.handle_event(event)
         self.btn_reset.handle_event(event); self.btn_scan.handle_event(event)
+
     def update(self):
         if self.show_traversal_menu: return
         self.belt_offset = (self.belt_offset + 1) % 20
@@ -465,6 +519,7 @@ class RouterTreeSimulation:
         self.packages_group.update()
         self.drone_group.update()
         self.lcd.update()
+
     def draw_traversal_menu(self):
         overlay = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA); overlay.fill((0, 0, 0, 180))
         self.screen.blit(overlay, (0, 0))
@@ -472,6 +527,7 @@ class RouterTreeSimulation:
         title_surf = font_title.render("SELECT TRAVERSAL METHOD", True, WHITE)
         self.screen.blit(title_surf, (self.SIM_WIDTH//2 - title_surf.get_width()//2, 180))
         self.menu_btn_in.draw(self.screen); self.menu_btn_pre.draw(self.screen); self.menu_btn_post.draw(self.screen)
+
     def draw_traversal_result(self):
         overlay = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA); overlay.fill((0, 0, 0, 180))
         self.screen.blit(overlay, (0, 0))
@@ -501,6 +557,7 @@ class RouterTreeSimulation:
             font_prompt = pygame.font.SysFont("Arial", 12)
             prompt_surf = font_prompt.render("Click anywhere to dismiss", True, (100, 100, 100))
             self.screen.blit(prompt_surf, (x + w - prompt_surf.get_width() - 10, y + h - prompt_surf.get_height() - 10))
+
     def draw(self):
         self.screen.blit(self.bg_surface, (0, 0))
         self.draw_tree_nodes_and_labels(self.logic.root)

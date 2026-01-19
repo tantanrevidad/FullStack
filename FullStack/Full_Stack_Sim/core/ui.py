@@ -3,18 +3,22 @@ import math
 from settings import *
 
 class HandheldChassis:
+    """Renders the rugged industrial scanner device frame."""
     def __init__(self, x, y, w, h):
         self.rect = pygame.Rect(x, y, w, h)
         self.inner_rect = self.rect.inflate(-20, -20)
 
     def draw(self, screen):
+        # Draw body, bezel, and hazard stripes
         shadow_rect = self.rect.copy()
         shadow_rect.y += 5
         pygame.draw.rect(screen, (20, 20, 25), shadow_rect, border_radius=30)
         pygame.draw.rect(screen, DEVICE_BODY, self.rect, border_radius=30)
         pygame.draw.rect(screen, DEVICE_HIGHLIGHT, self.rect, width=3, border_radius=30)
+        
         self._draw_hazard_stripes(screen, self.rect.left, self.rect.top + 40, 15, self.rect.height - 80)
         self._draw_hazard_stripes(screen, self.rect.right - 15, self.rect.top + 40, 15, self.rect.height - 80)
+        
         self._draw_bolt(screen, self.rect.left + 20, self.rect.top + 20)
         self._draw_bolt(screen, self.rect.right - 20, self.rect.top + 20)
         self._draw_bolt(screen, self.rect.left + 20, self.rect.bottom - 20)
@@ -44,6 +48,7 @@ class HandheldChassis:
         pygame.draw.line(screen, (100, 100, 100), (x, y-3), (x, y+3), 1)
 
 class LCDDisplay:
+    """Handles text input and status messages on the scanner screen."""
     def __init__(self, x, y, w, h):
         self.rect = pygame.Rect(x, y, w, h)
         self.text = ""
@@ -60,7 +65,6 @@ class LCDDisplay:
             elif event.key == pygame.K_RETURN:
                 return self.text
             else:
-                # --- CHANGE: Allow mathematical operators and parentheses ---
                 allowed_chars = ':-+*/^()'
                 if event.unicode.isalnum() or event.unicode in allowed_chars:
                     self.text += event.unicode.upper()
@@ -76,37 +80,38 @@ class LCDDisplay:
         pygame.draw.rect(screen, (10, 15, 20), self.rect, border_radius=5)
         screen_rect = self.rect.inflate(-10, -10)
         pygame.draw.rect(screen, LCD_BG, screen_rect, border_radius=3)
+        
+        # Scanlines
         for i in range(screen_rect.top, screen_rect.bottom, 4):
             pygame.draw.line(screen, LCD_SCANLINE, (screen_rect.left, i), (screen_rect.right, i), 1)
-        
+            
+        # Status Text
         status_surf = self.font_small.render(self.status_msg, True, LCD_TEXT_DIM)
         screen.blit(status_surf, (screen_rect.x + 10, screen_rect.y + 8))
-
-        # --- CHANGE: Implement scrolling text for overflow ---
+        
+        # Input Text
         display_text = self.text
         txt_surf = self.font_large.render(display_text, True, LCD_TEXT_MAIN)
         
-        # While the rendered text is wider than the display area, chop off the first character
+        # Scroll text if too long
         while txt_surf.get_width() > screen_rect.width - 10:
             display_text = display_text[1:]
             txt_surf = self.font_large.render(display_text, True, LCD_TEXT_MAIN)
-
+            
         txt_x = screen_rect.left + 5
         txt_y = screen_rect.centery - 5
-        
-        # Use a clipping rectangle to ensure text doesn't spill out
         screen.set_clip(screen_rect)
         screen.blit(txt_surf, (txt_x, txt_y))
         
+        # Blinking Cursor
         if (self.cursor_blink // 30) % 2 == 0:
             cursor_x = txt_x + txt_surf.get_width() + 2
             if cursor_x < screen_rect.right - 10:
                 pygame.draw.rect(screen, LCD_TEXT_MAIN, (cursor_x, txt_y, 10, 24))
-        
-        screen.set_clip(None) # Reset clipping
-        
+        screen.set_clip(None)
 
 class RoundButton:
+    """Circular interactive button."""
     def __init__(self, cx, cy, radius, color_base, color_light, text, callback):
         self.center = (cx, cy)
         self.radius = radius
@@ -140,20 +145,28 @@ class RoundButton:
         cx, cy = self.center
         r = self.radius
         offset_y = 4 if not self.is_pressed else 0
+        
+        # Shadow and Body
         pygame.draw.circle(screen, BTN_SHADOW, (cx, cy + 6), r + 2)
         pygame.draw.circle(screen, (self.color_base[0]//2, self.color_base[1]//2, self.color_base[2]//2), (cx, cy + offset_y + 4), r)
         pygame.draw.circle(screen, self.color_base, (cx, cy + offset_y), r)
+        
+        # Highlight
         pygame.draw.circle(screen, self.color_light, (cx, cy + offset_y - 2), r - 4)
         pygame.draw.circle(screen, self.color_base, (cx, cy + offset_y + 2), r - 4)
+        
+        # Text
         txt_surf = self.font.render(self.text, True, (255, 255, 255))
         txt_rect = txt_surf.get_rect(center=(cx, cy + offset_y))
         shadow_surf = self.font.render(self.text, True, (0, 0, 0, 100))
         screen.blit(shadow_surf, (txt_rect.x + 1, txt_rect.y + 1))
         screen.blit(txt_surf, txt_rect)
+        
         if self.is_hovered and not self.is_pressed:
             pygame.draw.circle(screen, (255, 255, 255), (cx, cy + offset_y), r, 2)
 
 class Button:
+    """Rectangular interactive button."""
     def __init__(self, x, y, w, h, text, callback_func):
         self.rect = pygame.Rect(x, y, w, h)
         self.text = text
@@ -181,15 +194,20 @@ class Button:
         color = base_color
         if self.is_hovered: color = hover_color
         if self.is_pressed: color = press_color
+        
         shadow_rect = self.rect.copy()
         shadow_rect.y += 3
         pygame.draw.rect(screen, (30, 35, 40), shadow_rect, border_radius=3)
+        
         btn_rect = self.rect.copy()
         if self.is_pressed:
             btn_rect.y += 2
         pygame.draw.rect(screen, color, btn_rect, border_radius=3)
+        
+        # Accent stripe
         pygame.draw.rect(screen, (255, 200, 0), (btn_rect.x, btn_rect.y, 5, btn_rect.height), border_top_left_radius=3, border_bottom_left_radius=3)
         pygame.draw.line(screen, (255, 255, 255, 50), btn_rect.topleft, btn_rect.topright, 1)
+        
         text_surf = self.font.render(self.text, True, (255, 255, 255))
         text_rect = text_surf.get_rect(center=btn_rect.center)
         screen.blit(text_surf, text_rect)
