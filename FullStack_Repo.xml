@@ -1258,6 +1258,7 @@ class ExpressionTreeManager:
                 break
         return label
     def build_from_levels(self, num_levels):
+        """Generates a perfect binary tree of a given depth."""
         if not 1 <= num_levels <= 5: return False
         node_index = 0
         self.root = Node(self._get_label_from_index(node_index))
@@ -1916,33 +1917,30 @@ class ParkingQueueSimulation:
         self.event_queue = events
         self.process_next_event()
     def action_skip(self):
+        """Resets the simulation state to match the logic state instantly."""
         if not self.is_animating: return
-        # 1. Stop all movement
+        # Stop all movement
         for s in self.all_sprites:
             s.is_moving = False
             s.on_finish_callback = None
-        # 2. Clear pending events
         self.event_queue = []
-        # 3. Sync Visuals to Logic
+        # Sync Visuals to Logic
         valid_plates = [v.plate for v in self.logic.items]
-        # Kill sprites that shouldn't exist
         for sprite in self.crates_group:
             if sprite.plate not in valid_plates:
                 sprite.kill()
-        # Rebuild visual_queue to match logic order
         self.visual_queue = []
         for vehicle in self.logic.items:
             found_sprite = next((s for s in self.crates_group if s.plate == vehicle.plate), None)
             if found_sprite:
                 self.visual_queue.append(found_sprite)
-        # 4. Snap sprites to correct positions
+        # Snap sprites to correct positions
         for i, sprite in enumerate(self.visual_queue):
             target_x = self.GATE_X - (i * self.SLOT_GAP)
             sprite.pos_x = target_x
             sprite.pos_y = self.LANE_Y
             sprite.rect.center = (int(sprite.pos_x), int(sprite.pos_y))
             self._force_orientation(sprite, 0)
-        # 5. Reset State
         self.is_animating = False
         self.lcd.update_status("READY")
     def process_next_event(self):
@@ -2044,17 +2042,22 @@ from core.sprites import CrateSprite
 from core.ui import HandheldChassis, LCDDisplay, RoundButton
 class Vehicle:
     def __init__(self, plate, arrival_count, departure_count):
-        self.plate = plate; self.arrival_count = arrival_count; self.departure_count = departure_count
+        self.plate = plate
+        self.arrival_count = arrival_count
+        self.departure_count = departure_count
 class StackManager:
     def __init__(self, capacity=10):
-        self.items = []; self.capacity = capacity; self.history = {}
+        self.items = []
+        self.capacity = capacity
+        self.history = {}
     def _get_stats(self, plate):
         if plate not in self.history: self.history[plate] = {'arrivals': 0, 'departures': 0}
         return self.history[plate]
     def push(self, plate):
         if len(self.items) >= self.capacity: return {"type": "OVERFLOW", "message": "BAY FULL"}
         if any(v.plate == plate for v in self.items): return {"type": "DUPLICATE", "message": "ALREADY HERE"}
-        stats = self._get_stats(plate); stats['arrivals'] += 1
+        stats = self._get_stats(plate)
+        stats['arrivals'] += 1
         new_vehicle = Vehicle(plate, stats['arrivals'], stats['departures'])
         self.items.append(new_vehicle)
         return {"type": "PUSH", "index": len(self.items) - 1, "data": new_vehicle}
@@ -2063,18 +2066,24 @@ class StackManager:
         for i, v in enumerate(self.items):
             if v.plate == plate: target_index = i; break
         if target_index == -1: return [{"type": "ERROR", "message": "NOT FOUND"}]
-        events = []; current_top_index = len(self.items) - 1; temp_holding = []
+        events = []
+        current_top_index = len(self.items) - 1
+        temp_holding = []
         while len(self.items) > target_index + 1:
-            v = self.items.pop(); temp_holding.append(v)
-            stats = self._get_stats(v.plate); stats['departures'] += 1
+            v = self.items.pop()
+            temp_holding.append(v)
+            stats = self._get_stats(v.plate)
+            stats['departures'] += 1
             events.append({"type": "TEMP_POP", "data": v, "index": current_top_index})
             current_top_index -= 1
         target_vehicle = self.items.pop()
-        stats = self._get_stats(target_vehicle.plate); stats['departures'] += 1
+        stats = self._get_stats(target_vehicle.plate)
+        stats['departures'] += 1
         events.append({"type": "FINAL_POP", "data": target_vehicle, "index": target_index, "stats": stats})
         for v in reversed(temp_holding):
             self.items.append(v)
-            stats = self._get_stats(v.plate); stats['arrivals'] += 1
+            stats = self._get_stats(v.plate)
+            stats['arrivals'] += 1
             events.append({"type": "RESTACK_PUSH", "data": v, "index": len(self.items) - 1})
         return events
     def get_inventory_report(self):
@@ -2085,8 +2094,10 @@ class StackManager:
         return report
 class ParkingStackSimulation:
     def __init__(self, screen):
-        self.screen = screen; self.logic = StackManager(capacity=10)
-        self.all_sprites = pygame.sprite.Group(); self.crates_group = pygame.sprite.Group()
+        self.screen = screen
+        self.logic = StackManager(capacity=10)
+        self.all_sprites = pygame.sprite.Group()
+        self.crates_group = pygame.sprite.Group()
         self.ui_x = 750; self.ui_y = 0; self.ui_w = 250; self.ui_h = SCREEN_HEIGHT
         self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
         self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
@@ -2096,9 +2107,12 @@ class ParkingStackSimulation:
         self.btn_depart = RoundButton(btn_cx, 390, 45, BTN_RED_BASE, BTN_RED_LIGHT, "DEPART", self.action_depart)
         self.btn_summary = RoundButton(btn_cx, 500, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "SUMMARY", self.action_summary)
         self.btn_skip = RoundButton(btn_cx, 590, 30, (100, 100, 100), (150, 150, 150), "SKIP", self.action_skip)
-        self.visual_stack = []; self.holding_stack_height = 0
-        self.last_receipt = None; self.event_queue = []
-        self.is_animating = False; self.show_summary = False
+        self.visual_stack = []
+        self.holding_stack_height = 0
+        self.last_receipt = None
+        self.event_queue = []
+        self.is_animating = False
+        self.show_summary = False
     def draw_pallet(self, x, y, boxes=2):
         pygame.draw.rect(self.screen, (100, 80, 50), (x, y, 30, 20))
         pygame.draw.line(self.screen, (60, 40, 20), (x, y+10), (x+30, y+10), 2)
@@ -2126,7 +2140,8 @@ class ParkingStackSimulation:
         glow_surf.fill(CONTROL_ROOM_GLOW)
         self.screen.blit(glow_surf, (335, 30))
         pygame.draw.rect(self.screen, (100, 110, 120), office_rect, 2, border_radius=5)
-        font = pygame.font.SysFont("Arial", 8); self.screen.blit(font.render("CONTROL", True, (150, 160, 170)), (375, 22))
+        font = pygame.font.SysFont("Arial", 8)
+        self.screen.blit(font.render("CONTROL", True, (150, 160, 170)), (375, 22))
         for x in [50, 150, 550, 650]:
             pygame.draw.rect(self.screen, (20, 22, 25), (x, 30, 60, 30))
             pygame.draw.rect(self.screen, (10, 12, 15), (x+5, 35, 50, 20))
@@ -2171,15 +2186,20 @@ class ParkingStackSimulation:
         plate = self.lcd.text.upper()
         if not plate: self.lcd.update_status("ERR: NO INPUT"); return
         receipt = self.logic.push(plate)
-        if receipt['type'] in ['OVERFLOW', 'DUPLICATE']: self.lcd.update_status(f"ERR: {receipt['message']}"); return
-        self.lcd.update_status(f"IN: {plate}"); self.lcd.text = ""
+        if receipt['type'] in ['OVERFLOW', 'DUPLICATE']:
+            self.lcd.update_status(f"ERR: {receipt['message']}")
+            return
+        self.lcd.update_status(f"IN: {plate}")
+        self.lcd.text = ""
         new_crate = CrateSprite(SPAWN_X, SPAWN_Y, receipt['data'].plate)
-        self.all_sprites.add(new_crate); self.crates_group.add(new_crate)
+        self.all_sprites.add(new_crate)
+        self.crates_group.add(new_crate)
         self.visual_stack.append(new_crate)
         slot_height = CRATE_WIDTH + PARKING_GAP
         stack_target_y = STACK_ZONE_BASE_Y - (receipt['index'] * slot_height)
         stack_target = (STACK_ZONE_X + CRATE_HEIGHT/2, stack_target_y)
-        def drive_to_stack(): new_crate.move_to(stack_target, callback=lambda: self._force_park_orientation(new_crate))
+        def drive_to_stack():
+            new_crate.move_to(stack_target, callback=lambda: self._force_park_orientation(new_crate))
         self.is_animating = True
         new_crate.move_to((RECEIVING_BAY_X, RECEIVING_BAY_Y), callback=drive_to_stack)
     def action_depart(self):
@@ -2187,37 +2207,33 @@ class ParkingStackSimulation:
         plate = self.lcd.text.upper()
         if not plate: return
         events = self.logic.remove_vehicle(plate)
-        if events[0]['type'] == 'ERROR': self.lcd.update_status(f"ERR: {events[0]['message']}"); return
-        self.lcd.update_status(f"OUT: {plate}"); self.lcd.text = ""
-        self.event_queue = events; self.is_animating = True
+        if events[0]['type'] == 'ERROR':
+            self.lcd.update_status(f"ERR: {events[0]['message']}")
+            return
+        self.lcd.update_status(f"OUT: {plate}")
+        self.lcd.text = ""
+        self.event_queue = events
+        self.is_animating = True
         self.process_next_event()
     def action_skip(self):
+        """Resets the simulation state to match the logic state instantly."""
         if not self.is_animating: return
-        # 1. Stop all movement and clear events
         self.event_queue = []
-        # 2. HARD RESET: Clear all existing sprites to prevent duplication/clumping
-        for s in self.crates_group:
-            s.kill()
+        for s in self.crates_group: s.kill()
         self.visual_stack = []
-        # 3. Regenerate sprites from Logic State (Source of Truth)
         slot_height = CRATE_WIDTH + PARKING_GAP
         for i, vehicle in enumerate(self.logic.items):
-            # Create fresh sprite
             new_sprite = CrateSprite(0, 0, vehicle.plate)
-            # Calculate exact position
             target_y = STACK_ZONE_BASE_Y - (i * slot_height)
             new_sprite.pos_x = STACK_ZONE_X + CRATE_HEIGHT/2
             new_sprite.pos_y = target_y
-            # Force orientation and position
             new_sprite.rect.center = (int(new_sprite.pos_x), int(new_sprite.pos_y))
             new_sprite.angle = 0
             new_sprite.image = pygame.transform.rotate(new_sprite.original_image, 0)
             new_sprite.is_moving = False
-            # Add to groups
             self.all_sprites.add(new_sprite)
             self.crates_group.add(new_sprite)
             self.visual_stack.append(new_sprite)
-        # 4. Reset State
         self.holding_stack_height = 0
         self.is_animating = False
         self.lcd.update_status("READY")
@@ -2235,7 +2251,8 @@ class ParkingStackSimulation:
         elif event['type'] == 'FINAL_POP':
             if self.visual_stack:
                 crate = self.visual_stack.pop()
-                self.last_receipt = event['stats']; self.last_receipt['plate'] = event['data'].plate
+                self.last_receipt = event['stats']
+                self.last_receipt['plate'] = event['data'].plate
                 def cleanup(): crate.kill(); self.process_next_event()
                 crate.move_to((SHIPPING_BAY_X, SHIPPING_BAY_Y), callback=cleanup)
             else: self.process_next_event()
@@ -3228,9 +3245,14 @@ from core.ui import HandheldChassis, LCDDisplay, RoundButton, Button
 class SortingManager:
     def __init__(self):
         self.items = []
+        self.original_items = []
     def generate_new_list(self, size=20):
         self.size = size
         self.items = random.sample(range(10, 100), self.size)
+        self.original_items = list(self.items)
+    def reset_to_original(self):
+        if self.original_items:
+            self.items = list(self.original_items)
     def get_bubble_sort_steps(self):
         steps = []
         items = list(self.items)
@@ -3380,16 +3402,20 @@ class ContainerSprite(pygame.sprite.Sprite):
         self.on_finish_callback = callback
     def update(self, speed_multiplier=1.0):
         if not self.is_moving: return
-        dx = self.target_x - self.pos_x; dy = self.target_y - self.pos_y
+        dx = self.target_x - self.pos_x
+        dy = self.target_y - self.pos_y
         effective_lerp = LERP_FACTOR * speed_multiplier
         effective_speed = MIN_SPEED * speed_multiplier
         if (dx**2 + dy**2) < effective_speed**2:
             self.pos_x, self.pos_y = self.target_x, self.target_y
             self.is_moving = False
             if self.on_finish_callback:
-                cb = self.on_finish_callback; self.on_finish_callback = None; cb()
+                cb = self.on_finish_callback
+                self.on_finish_callback = None
+                cb()
         else:
-            self.pos_x += dx * effective_lerp; self.pos_y += dy * effective_lerp
+            self.pos_x += dx * effective_lerp
+            self.pos_y += dy * effective_lerp
         self.rect.bottomleft = (int(self.pos_x), int(self.pos_y))
 class GantryCraneSprite(pygame.sprite.Sprite):
     def __init__(self, y_pos, rail_width):
@@ -3446,7 +3472,8 @@ class SortingSimulation:
         self.all_sprites = pygame.sprite.Group()
         self.containers = pygame.sprite.Group()
         self.crane_group = pygame.sprite.Group()
-        self.ui_x = 750; self.ui_w = 250
+        self.ui_x = 750
+        self.ui_w = 250
         self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
         self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
         self.lcd.update_status("SORTING FLOOR")
@@ -3458,7 +3485,8 @@ class SortingSimulation:
         self.speed_index = 1
         self.speed_multiplier = self.speed_levels[self.speed_index]
         speed_btn_y = self.chassis.rect.bottom - 60
-        speed_btn_w = 80; speed_btn_h = 30
+        speed_btn_w = 80
+        speed_btn_h = 30
         self.btn_speed_down = Button(btn_cx - speed_btn_w - 5, speed_btn_y, speed_btn_w, speed_btn_h, "Speed -", self.decrease_speed)
         self.btn_speed_up = Button(btn_cx + 5, speed_btn_y, speed_btn_w, speed_btn_h, "Speed +", self.increase_speed)
         self.is_sorting = False
@@ -3473,7 +3501,9 @@ class SortingSimulation:
         self._init_sort_menu()
         self.action_load_containers()
     def _init_sort_menu(self):
-        menu_btn_w, menu_btn_h = 220, 40; menu_cx = self.SIM_WIDTH // 2; start_y = 200
+        menu_btn_w, menu_btn_h = 220, 40
+        menu_cx = self.SIM_WIDTH // 2
+        start_y = 200
         self.menu_btn_bubble = Button(menu_cx - menu_btn_w//2, start_y, menu_btn_w, menu_btn_h, "Bubble Sort", lambda: self.action_begin_sort("bubble"))
         self.menu_btn_selection = Button(menu_cx - menu_btn_w//2, start_y + 50, menu_btn_w, menu_btn_h, "Selection Sort", lambda: self.action_begin_sort("selection"))
         self.menu_btn_insertion = Button(menu_cx - menu_btn_w//2, start_y + 100, menu_btn_w, menu_btn_h, "Insertion Sort", lambda: self.action_begin_sort("insertion"))
@@ -3488,8 +3518,10 @@ class SortingSimulation:
                 shelf_rect = pygame.Rect(cx, ry, w/cols, h/rows)
                 pygame.draw.rect(surf, (40,45,50), shelf_rect, 1)
                 if random.random() > 0.2:
-                    box_w = random.randint(10, int(w/cols - 5)); box_h = random.randint(5, int(h/rows - 5))
-                    box_x = cx + random.randint(2, int(w/cols - box_w - 2)); box_y = ry + int(h/rows - box_h - 2)
+                    box_w = random.randint(10, int(w/cols - 5))
+                    box_h = random.randint(5, int(h/rows - 5))
+                    box_x = cx + random.randint(2, int(w/cols - box_w - 2))
+                    box_y = ry + int(h/rows - box_h - 2)
                     color = random.choice([BOX_COLOR_1, BOX_COLOR_2, (160, 110, 50)])
                     pygame.draw.rect(surf, color, (box_x, box_y, box_w, box_h))
     def _draw_pillar(self, surf, x, y, w, h):
@@ -3512,26 +3544,21 @@ class SortingSimulation:
         pygame.draw.rect(bg, (40,45,50), (0,0,SCREEN_WIDTH, 80))
         light_fixtures = []
         for i in range(0, SCREEN_WIDTH, 150):
-            pygame.draw.rect(bg, (20,22,25), (i, 30, 100, 10)); pygame.draw.rect(bg, FLUORESCENT_LIGHT, (i+2, 32, 96, 6))
+            pygame.draw.rect(bg, (20,22,25), (i, 30, 100, 10))
+            pygame.draw.rect(bg, FLUORESCENT_LIGHT, (i+2, 32, 96, 6))
             light_fixtures.append((i+50, 40))
         rail_y = self.gantry_crane.y_pos - 30
-        pygame.draw.rect(bg, (50, 55, 60), (0, rail_y, SCREEN_WIDTH, 25)); pygame.draw.rect(bg, (80, 85, 90), (0, rail_y, SCREEN_WIDTH, 25), 2)
+        pygame.draw.rect(bg, (50, 55, 60), (0, rail_y, SCREEN_WIDTH, 25))
+        pygame.draw.rect(bg, (80, 85, 90), (0, rail_y, SCREEN_WIDTH, 25), 2)
         light_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         for lx, ly in light_fixtures:
             points = [(lx - 30, ly), (lx + 30, ly), (lx + 100, SCREEN_HEIGHT), (lx - 100, SCREEN_HEIGHT)]
             pygame.draw.polygon(light_layer, LIGHT_RAY_COLOR, points)
         bg.blit(light_layer, (0,0))
         return bg
-    def action_load_containers(self):
-        if self.is_sorting: return
-        size_text = self.lcd.text if self.lcd.text else "20"
-        try:
-            size = int(size_text)
-            if not 10 <= size <= 30: self.lcd.update_status("ERR: SIZE 10-30"); return
-        except ValueError: self.lcd.update_status("ERR: NOT A NUMBER"); return
-        self.lcd.update_status("LOADING CARGO...")
-        self.logic.generate_new_list(size=size)
-        for c in self.containers: c.kill()
+    def _rebuild_visuals(self):
+        for c in self.containers:
+            c.kill()
         self.visual_containers.clear()
         self.slot_positions.clear()
         container_width = (self.SIM_WIDTH - 100) / self.logic.size
@@ -3540,7 +3567,23 @@ class SortingSimulation:
             x = start_x + (i * container_width)
             self.slot_positions.append(x)
             c = ContainerSprite(value, x, self.FLOOR_Y, container_width - 4, 100)
-            self.containers.add(c); self.all_sprites.add(c); self.visual_containers.append(c)
+            self.containers.add(c)
+            self.all_sprites.add(c)
+            self.visual_containers.append(c)
+    def action_load_containers(self):
+        if self.is_sorting: return
+        size_text = self.lcd.text if self.lcd.text else "20"
+        try:
+            size = int(size_text)
+            if not 10 <= size <= 30:
+                self.lcd.update_status("ERR: SIZE 10-30")
+                return
+        except ValueError:
+            self.lcd.update_status("ERR: NOT A NUMBER")
+            return
+        self.lcd.update_status("LOADING CARGO...")
+        self.logic.generate_new_list(size=size)
+        self._rebuild_visuals()
         self.lcd.update_status("READY TO SORT")
     def action_open_sort_menu(self):
         if self.is_sorting or not self.visual_containers: return
@@ -3548,29 +3591,42 @@ class SortingSimulation:
     def action_begin_sort(self, sort_type):
         self.show_sort_menu = False
         if self.is_sorting: return
+        self.logic.reset_to_original()
+        self._rebuild_visuals()
         self.is_sorting = True
         self.lcd.update_status(f"SORTING: {sort_type.upper()}")
-        st_map = {"bubble": self.logic.get_bubble_sort_steps, "selection": self.logic.get_selection_sort_steps,
-                  "insertion": self.logic.get_insertion_sort_steps, "merge": self.logic.get_merge_sort_steps,
-                  "quick": self.logic.get_quick_sort_steps}
+        st_map = {
+            "bubble": self.logic.get_bubble_sort_steps,
+            "selection": self.logic.get_selection_sort_steps,
+            "insertion": self.logic.get_insertion_sort_steps,
+            "merge": self.logic.get_merge_sort_steps,
+            "quick": self.logic.get_quick_sort_steps
+        }
         self.sort_steps = st_map[sort_type]()
         self.process_next_step()
     def action_reset(self):
         for sprite in self.all_sprites:
-            sprite.is_moving = False; sprite.on_finish_callback = None
-        self.is_sorting = False; self.sort_steps.clear(); self.show_sort_menu = False
-        self.lcd.update_status("SYSTEM RESET"); self.action_load_containers()
+            sprite.is_moving = False
+            sprite.on_finish_callback = None
+        self.is_sorting = False
+        self.sort_steps.clear()
+        self.show_sort_menu = False
+        self.lcd.update_status("SYSTEM RESET")
+        self.action_load_containers()
     def increase_speed(self):
         if self.speed_index < len(self.speed_levels) - 1:
-            self.speed_index += 1; self.speed_multiplier = self.speed_levels[self.speed_index]
+            self.speed_index += 1
+            self.speed_multiplier = self.speed_levels[self.speed_index]
             self.lcd.update_status(f"SPEED: {self.speed_multiplier}x")
     def decrease_speed(self):
         if self.speed_index > 0:
-            self.speed_index -= 1; self.speed_multiplier = self.speed_levels[self.speed_index]
+            self.speed_index -= 1
+            self.speed_multiplier = self.speed_levels[self.speed_index]
             self.lcd.update_status(f"SPEED: {self.speed_multiplier}x")
     def reset_container_states(self):
         for c in self.visual_containers:
-            if c.state != 'sorted': c.set_state('idle')
+            if c.state != 'sorted':
+                c.set_state('idle')
     def on_reorder_complete(self, indices, values):
         value_map = {c.value: c for c in self.visual_containers}
         reordered_visual_slice = [value_map[v] for v in values]
@@ -3579,27 +3635,44 @@ class SortingSimulation:
         self.process_next_step()
     def process_next_step(self):
         if not self.sort_steps or not self.is_sorting:
-            self.is_sorting = False; self.lcd.update_status("SORT COMPLETE"); self.reset_container_states(); return
+            self.is_sorting = False
+            self.lcd.update_status("SORT COMPLETE")
+            self.reset_container_states()
+            return
         step = self.sort_steps.pop(0)
         self.reset_container_states()
         step_type = step.get("type")
         if step_type == "compare":
-            idx1, idx2 = step["indices"]; c1, c2 = self.visual_containers[idx1], self.visual_containers[idx2]
-            c1.set_state('comparing'); c2.set_state('comparing')
+            idx1, idx2 = step["indices"]
+            c1 = self.visual_containers[idx1]
+            c2 = self.visual_containers[idx2]
+            c1.set_state('comparing')
+            c2.set_state('comparing')
             target_crane_x = (c1.rect.centerx + c2.rect.centerx) / 2
             self.gantry_crane.move_to(target_crane_x, self.process_next_step)
         elif step_type == "swap":
-            idx1, idx2 = step["indices"]; c1, c2 = self.visual_containers[idx1], self.visual_containers[idx2]
+            idx1, idx2 = step["indices"]
+            c1 = self.visual_containers[idx1]
+            c2 = self.visual_containers[idx2]
             self.visual_containers[idx1], self.visual_containers[idx2] = c2, c1
-            pos1_x, pos2_x = self.slot_positions[idx1], self.slot_positions[idx2]
-            c1.move_to((pos2_x, c1.pos_y)); c2.move_to((pos1_x, c2.pos_y), self.process_next_step)
+            pos1_x = self.slot_positions[idx1]
+            pos2_x = self.slot_positions[idx2]
+            c1.move_to((pos2_x, c1.pos_y))
+            c2.move_to((pos1_x, c2.pos_y), self.process_next_step)
         elif step_type in ["lock", "set_pivot", "highlight"]:
-            state = {"lock": "sorted", "set_pivot": "pivot", "highlight": "highlight"}[step_type]
-            for idx in step.get("indices", [step.get("index")]):
-                if 0 <= idx < len(self.visual_containers): self.visual_containers[idx].set_state(state)
+            state = {
+                "lock": "sorted",
+                "set_pivot": "pivot",
+                "highlight": "highlight"
+            }[step_type]
+            indices = step.get("indices", [step.get("index")])
+            for idx in indices:
+                if 0 <= idx < len(self.visual_containers):
+                    self.visual_containers[idx].set_state(state)
             self.process_next_step()
         elif step_type == "reorder":
-            indices, values = step["indices"], step["values"]
+            indices = step["indices"]
+            values = step["values"]
             value_map = {c.value: c for c in self.visual_containers}
             callback = lambda: self.on_reorder_complete(indices, values)
             for i, idx in enumerate(indices):
@@ -3608,19 +3681,24 @@ class SortingSimulation:
                 sprite_to_move = value_map[values[i]]
                 sprite_to_move.move_to((target_x, self.FLOOR_Y), cb)
         elif step_type == "lock_all":
-            for c in self.visual_containers: c.set_state('sorted')
+            for c in self.visual_containers:
+                c.set_state('sorted')
             self.process_next_step()
     def handle_events(self, event):
         if self.show_sort_menu:
-            for btn in self.sort_menu_buttons: btn.handle_event(event)
+            for btn in self.sort_menu_buttons:
+                btn.handle_event(event)
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if not any(btn.rect.collidepoint(event.pos) for btn in self.sort_menu_buttons):
                     self.show_sort_menu = False
             return
-        self.lcd.handle_event(event); self.btn_reset.handle_event(event)
-        self.btn_speed_up.handle_event(event); self.btn_speed_down.handle_event(event)
+        self.lcd.handle_event(event)
+        self.btn_reset.handle_event(event)
+        self.btn_speed_up.handle_event(event)
+        self.btn_speed_down.handle_event(event)
         if not self.is_sorting:
-            self.btn_load.handle_event(event); self.btn_sort.handle_event(event)
+            self.btn_load.handle_event(event)
+            self.btn_sort.handle_event(event)
     def update(self):
         if self.show_sort_menu: return
         self.all_sprites.update(self.speed_multiplier)
@@ -3632,7 +3710,8 @@ class SortingSimulation:
         font_title = pygame.font.SysFont("Impact", 30)
         title_surf = font_title.render("SELECT SORTING ALGORITHM", True, WHITE)
         self.screen.blit(title_surf, (self.SIM_WIDTH//2 - title_surf.get_width()//2, 140))
-        for btn in self.sort_menu_buttons: btn.draw(self.screen)
+        for btn in self.sort_menu_buttons:
+            btn.draw(self.screen)
     def draw(self):
         self.screen.blit(self.background, (0, 0))
         self.all_sprites.draw(self.screen)
@@ -3641,20 +3720,27 @@ class SortingSimulation:
             text_surf = font.render(str(container.value), True, BLACK)
             padding = 3
             label_size = (text_surf.get_width() + padding * 2, text_surf.get_height() + padding * 2)
-            label_surf = pygame.Surface(label_size); label_surf.fill(WHITE)
+            label_surf = pygame.Surface(label_size)
+            label_surf.fill(WHITE)
             pygame.draw.rect(label_surf, BLACK, label_surf.get_rect(), 1)
             label_surf.blit(text_surf, (padding, padding))
             visible_body_rect = pygame.Rect(
                 container.rect.left + container.container_body_rect.left,
                 container.rect.top + container.container_body_rect.top,
                 container.container_body_rect.width,
-                container.container_body_rect.height)
+                container.container_body_rect.height
+            )
             label_rect = label_surf.get_rect(midbottom=visible_body_rect.midtop, y=visible_body_rect.top - 15)
             self.screen.blit(label_surf, label_rect)
-        self.chassis.draw(self.screen); self.lcd.draw(self.screen)
-        self.btn_load.draw(self.screen); self.btn_sort.draw(self.screen); self.btn_reset.draw(self.screen)
-        self.btn_speed_up.draw(self.screen); self.btn_speed_down.draw(self.screen)
-        if self.show_sort_menu: self.draw_sort_menu()
+        self.chassis.draw(self.screen)
+        self.lcd.draw(self.screen)
+        self.btn_load.draw(self.screen)
+        self.btn_sort.draw(self.screen)
+        self.btn_reset.draw(self.screen)
+        self.btn_speed_up.draw(self.screen)
+        self.btn_speed_down.draw(self.screen)
+        if self.show_sort_menu:
+            self.draw_sort_menu()
 </file>
 
 <file path="Full_Stack_Sim/simulation/site_warehouse_array.py/site_warehouse_array.py">
