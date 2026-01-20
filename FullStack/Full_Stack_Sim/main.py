@@ -4,6 +4,7 @@ import math
 import random
 from settings import *
 from core.ui import Button
+from core.sound_engine import MusicSequencer
 from simulation.site_parking_stack import ParkingStackSimulation
 from simulation.site_parking_queue import ParkingQueueSimulation
 from simulation.site_conveyor_list import ConveyorSimulation
@@ -575,11 +576,19 @@ class MainMenu:
                 self.screen.blit(text, (SCREEN_WIDTH//2 - text.get_width()//2, SCREEN_HEIGHT//2))
 
 def main():
+    # 1. Init Mixer (44.1kHz, 16-bit, 2 channels, buffer 1024)
+    pygame.mixer.pre_init(44100, -16, 2, 1024) 
+    pygame.init()
+    pygame.mixer.set_num_channels(16)
+
     pygame.init()
     flags = pygame.SCALED
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), flags)
     pygame.display.set_caption("Full Stack Logistics Simulator")
     clock = pygame.time.Clock()
+
+    sequencer = MusicSequencer()
+    sequencer.start()
     
     current_scene = None
     is_fullscreen = False
@@ -652,6 +661,8 @@ def main():
             
             if current_scene:
                 current_scene.handle_events(event)
+
+        sequencer.update()
 
         if current_scene:
             current_scene.update()

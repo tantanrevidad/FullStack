@@ -1,12 +1,12 @@
 ARCHITECTURE GUIDELINES
 
 1. MODULAR DESIGN
-   - Core Engine (`core/`): Rendering engines (`sprites.py`) and UI system (`ui.py`).
+   - Core Engine (`core/`): Rendering engines (`sprites.py`), UI system (`ui.py`), and Audio Synthesis (`sound_engine.py`).
    - Simulation Modules (`simulation/`): Self-contained "Site" files. Each site file
      encapsulates both the specific data structure logic and its corresponding
      Pygame visualization class.
    - Controller (`main.py`): A robust State Machine handling the "Facility Overview,"
-     scene transitions, and global display settings (Fullscreen/Scaling).
+     scene transitions, global display settings, and the Music Sequencer.
 
 2. LOGIC LAYER (The Backend)
    - Pure Python classes decoupled from Pygame.
@@ -27,7 +27,6 @@ ARCHITECTURE GUIDELINES
        and specific mechanical animations (fans, elevators, cranes).
      - Lighting System: Uses gradient alpha blending to create soft spotlights and 
        glow effects on hover.
-     - Terrain: Tiled concrete generation with expansion joints, cracks, and oil stains.
    - Simulation Views:
      - Specific sprites (`ForkliftSprite`, `DroneSprite`, `GantryCrane`) handle 
        complex interpolation and state transitions (e.g., Move -> Lift -> Drop).
@@ -41,3 +40,13 @@ ARCHITECTURE GUIDELINES
    - Transitions:
      - "System Uplink": A fade-to-black terminal effect when switching modules 
        to simulate remote connection.
+
+5. AUDIO LAYER (The Synthesizer)
+   - Zero-Asset Philosophy: No external .mp3 or .wav files are used.
+   - `SoundGenerator`: Uses Python's `math` and `array` libraries to generate raw PCM 
+     audio buffers (Sine, Square, Sawtooth, White Noise) at runtime.
+   - `MusicSequencer`: A state-based conductor that runs alongside the game loop.
+     - Adaptive Themes: Changes musical scales (e.g., C Minor to F Minor) and 
+       rhythmic density based on the active facility.
+     - Procedural Composition: Randomizes melody and percussion within strict 
+       music theory rules (Pentatonic scales) to ensure infinite, non-repetitive background audio.
