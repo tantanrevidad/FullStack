@@ -204,6 +204,10 @@ class ParkingStackSimulation:
         plate = self.lcd.text.upper()
         if not plate: self.lcd.update_status("ERR: NO INPUT"); return
         
+        if len(plate) > 10:
+            self.lcd.update_status("ERR: MAX 10 CHARS")
+            return
+        
         receipt = self.logic.push(plate)
         if receipt['type'] in ['OVERFLOW', 'DUPLICATE']: 
             self.lcd.update_status(f"ERR: {receipt['message']}")

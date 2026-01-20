@@ -5,8 +5,8 @@ from settings import *
 from core.sprites import CrateSprite
 from core.ui import HandheldChassis, LCDDisplay, RoundButton, Button
 
+# ... [Keep BSTNode, BSTManager, PackageSprite, and DroneSprite classes unchanged] ...
 class BSTNode:
-    """Node structure for the Binary Search Tree."""
     def __init__(self, value):
         self.value = value
         self.left = None
@@ -17,21 +17,12 @@ class BSTNode:
         self.push_arm_timer = 0
 
 class BSTManager:
-    """
-    Backend Logic for Binary Search Tree.
-    Handles insertion logic and generates traversal paths (In/Pre/Post-order).
-    """
     def __init__(self):
         self.root = None
         self.nodes_count = 0
         self.max_allowed_depth = 5
         self.current_depth = 0
-
     def insert(self, value):
-        """
-        Inserts a value into the BST.
-        Returns a receipt containing the path nodes for visualization.
-        """
         if self.root is None:
             self.root = BSTNode(value)
             self.nodes_count += 1
@@ -65,39 +56,32 @@ class BSTManager:
                     }
                 current = current.right
             depth += 1
-
     def clear(self):
         self.root = None
         self.nodes_count = 0
         self.current_depth = 0
-
     def in_order(self):
         result = []
         self._in_order_recursive(self.root, result)
         return result
-
     def _in_order_recursive(self, node, result):
         if node:
             self._in_order_recursive(node.left, result)
             result.append(node)
             self._in_order_recursive(node.right, result)
-
     def pre_order(self):
         result = []
         self._pre_order_recursive(self.root, result)
         return result
-
     def _pre_order_recursive(self, node, result):
         if node:
             result.append(node)
             self._pre_order_recursive(node.left, result)
             self._pre_order_recursive(node.right, result)
-
     def post_order(self):
         result = []
         self._post_order_recursive(self.root, result)
         return result
-
     def _post_order_recursive(self, node, result):
         if node:
             self._post_order_recursive(node.left, result)
@@ -105,9 +89,6 @@ class BSTManager:
             result.append(node)
 
 class PackageSprite(pygame.sprite.Sprite):
-    """
-    Represents a data packet traveling through the routing nodes.
-    """
     def __init__(self, start_x, start_y, value, size=30):
         super().__init__()
         self.value = value
@@ -122,7 +103,6 @@ class PackageSprite(pygame.sprite.Sprite):
         self.attached_node = None
         self.resize(size)
         self.rect = self.image.get_rect(center=(start_x, start_y))
-
     def resize(self, size):
         s = int(size)
         if s < 10: s = 10
@@ -140,17 +120,14 @@ class PackageSprite(pygame.sprite.Sprite):
         pygame.draw.line(self.image, BOX_TAPE, (half, 0), (half, s), tape_w)
         pygame.draw.line(self.image, BOX_TAPE, (0, half), (s, half), tape_w)
         self.rect = self.image.get_rect(center=(int(self.pos_x), int(self.pos_y)))
-
     def add_path(self, nodes):
         self.path_queue.extend(nodes)
         if not self.is_moving and self.path_queue:
             self._start_next_leg()
-
     def _start_next_leg(self):
         if not self.path_queue: return
         self.target_node = self.path_queue.pop(0)
         self.is_moving = True
-
     def update(self):
         if self.attached_node:
             self.pos_x = self.attached_node.x
@@ -158,16 +135,13 @@ class PackageSprite(pygame.sprite.Sprite):
             self.rect.center = (int(self.pos_x), int(self.pos_y))
             return
         if not self.is_moving or not self.target_node: return
-        
         tx, ty = self.target_node.x, self.target_node.y
         dx = tx - self.pos_x
         dy = ty - self.pos_y
         dist = math.sqrt(dx**2 + dy**2)
-        
         if dist < MIN_SPEED:
             self.pos_x, self.pos_y = tx, ty
             if self.path_queue:
-                # Trigger diverter arm animation on the node
                 if self.target_node.left or self.target_node.right:
                     next_node = self.path_queue[0]
                     if next_node.value <= self.target_node.value:
@@ -190,9 +164,6 @@ class PackageSprite(pygame.sprite.Sprite):
         self.rect.center = (int(self.pos_x), int(self.pos_y))
 
 class DroneSprite(pygame.sprite.Sprite):
-    """
-    Animated drone used to visualize tree traversal algorithms.
-    """
     def __init__(self, x, y):
         super().__init__()
         self.pos_x = float(x); self.pos_y = float(y)
@@ -205,7 +176,6 @@ class DroneSprite(pygame.sprite.Sprite):
         self.image = pygame.Surface((1,1))
         self.rect = self.image.get_rect(center=(x,y))
         self.resize(40)
-
     def resize(self, size):
         s = int(size)
         if s < 15: s = 15
@@ -216,29 +186,21 @@ class DroneSprite(pygame.sprite.Sprite):
         chassis_radius = s * 0.25
         arm_length = s * 0.5
         rotor_radius = s * 0.12
-        
-        # Arms
         arm_color = (80, 85, 90)
         pygame.draw.line(self.original_image, arm_color, (center, center), (center - arm_length, center - arm_length), 3)
         pygame.draw.line(self.original_image, arm_color, (center, center), (center + arm_length, center - arm_length), 3)
         pygame.draw.line(self.original_image, arm_color, (center, center), (center - arm_length, center + arm_length), 3)
         pygame.draw.line(self.original_image, arm_color, (center, center), (center + arm_length, center + arm_length), 3)
-        
-        # Rotors
         pod_color = (50, 55, 60)
         pygame.draw.circle(self.original_image, pod_color, (center - arm_length, center - arm_length), rotor_radius)
         pygame.draw.circle(self.original_image, pod_color, (center + arm_length, center - arm_length), rotor_radius)
         pygame.draw.circle(self.original_image, pod_color, (center - arm_length, center + arm_length), rotor_radius)
         pygame.draw.circle(self.original_image, pod_color, (center + arm_length, center + arm_length), rotor_radius)
-        
-        # Body
         pygame.draw.circle(self.original_image, (0,0,0,80), (center+2, center+2), chassis_radius)
         pygame.draw.circle(self.original_image, (180,185,190), (center, center), chassis_radius)
         pygame.draw.circle(self.original_image, (100,105,110), (center, center), chassis_radius, 1)
         pygame.draw.circle(self.original_image, (255, 80, 80), (center, center), chassis_radius * 0.5)
         pygame.draw.circle(self.original_image, (255, 150, 150), (center-1, center-1), chassis_radius * 0.2)
-        
-        # Blades
         self.rotor_image = pygame.Surface((s,s), pygame.SRCALPHA)
         blade_color = (50,55,60,180)
         blade_length = rotor_radius * 1.5
@@ -247,12 +209,10 @@ class DroneSprite(pygame.sprite.Sprite):
             end_x = center + math.cos(rad) * arm_length
             end_y = center + math.sin(rad) * arm_length
             pygame.draw.line(self.rotor_image, blade_color, (end_x - blade_length, end_y), (end_x + blade_length, end_y), 2)
-
     def move_to(self, target_pos, callback=None):
         self.target_x, self.target_y = target_pos
         self.on_finish_callback = callback
         self.is_moving = True
-
     def update(self):
         self.rotor_angle = (self.rotor_angle + 45) % 360
         if self.is_moving:
@@ -272,90 +232,115 @@ class DroneSprite(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=(int(self.pos_x), int(self.pos_y)))
 
 class RouterTreeSimulation:
-    """
-    Visualization for the BST Module.
-    Renders the warehouse floor, tree nodes, and manages package/drone sprites.
-    """
     def __init__(self, screen):
         self.screen = screen
         self.logic = BSTManager()
         self.packages_group = pygame.sprite.Group()
         self.drone = DroneSprite(-50, -50)
         self.drone_group = pygame.sprite.GroupSingle(self.drone)
-        
         self.ui_x = 750; self.ui_w = 250
         self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
         self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
         self.lcd.update_status("ROUTING SYSTEM")
-        
         btn_cx = self.ui_x + self.ui_w // 2
         self.btn_insert = RoundButton(btn_cx, 280, 45, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "INJECT", self.action_insert)
         self.btn_reset = RoundButton(btn_cx, 390, 45, BTN_RED_BASE, BTN_RED_LIGHT, "CLEAR", self.action_reset)
         self.btn_scan = RoundButton(btn_cx, 500, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "TRAVERSE", self.action_open_traversal_menu)
-        
         self.is_animating = False
         self.SIM_WIDTH = 750; self.TOP_MARGIN = 120; self.BOTTOM_MARGIN = 50
         self.ROOT_X = self.SIM_WIDTH // 2
         self.target_node_size = 80; self.current_node_size = 80; self.belt_offset = 0
         self.bg_surface = self._generate_background()
-        
         self.show_traversal_menu = False; self.traversal_result_data = None; self.pending_report_data = None
         menu_btn_w, menu_btn_h = 200, 40; menu_cx = self.SIM_WIDTH // 2; menu_start_y = 250
         self.menu_btn_in = Button(menu_cx - menu_btn_w//2, menu_start_y, menu_btn_w, menu_btn_h, "In-Order Traversal", lambda: self.action_traverse("IN"))
         self.menu_btn_pre = Button(menu_cx - menu_btn_w//2, menu_start_y + 50, menu_btn_w, menu_btn_h, "Pre-Order Traversal", lambda: self.action_traverse("PRE"))
         self.menu_btn_post = Button(menu_cx - menu_btn_w//2, menu_start_y + 100, menu_btn_w, menu_btn_h, "Post-Order Traversal", lambda: self.action_traverse("POST"))
-        
         self.is_traversing = False; self.traversal_path = []; self.traversal_index = 0
         self.highlighted_node = None; self.highlight_timer = 0
 
     def _generate_background(self):
         bg = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        bg.fill(WALL_BASE_COLOR)
-        self._draw_shelf_unit(bg, 0, 100, SCREEN_WIDTH, SCREEN_HEIGHT / 2, 8, 25)
-        for i in range(7):
-            self._draw_pillar(bg, 50 + i * 150, 0, 20, SCREEN_HEIGHT)
-        floor_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        floor_surf.set_colorkey((0,0,0))
-        for _ in range(15000):
-            color = random.choice([CONCRETE_NOISE_1, CONCRETE_NOISE_2])
-            floor_surf.set_at((random.randint(0, SCREEN_WIDTH - 1), random.randint(0, SCREEN_HEIGHT - 1)), color)
-        bg.blit(floor_surf, (0, 0))
-        pygame.draw.rect(bg, (40,45,50), (0,0,SCREEN_WIDTH, 80))
-        light_fixtures = []
-        for i in range(0, SCREEN_WIDTH, 150):
-            pygame.draw.rect(bg, (20,22,25), (i, 30, 100, 10))
-            pygame.draw.rect(bg, FLUORESCENT_LIGHT, (i+2, 32, 96, 6))
-            light_fixtures.append((i+50, 40))
-        door_w, door_h = 150, 30; door_x = self.SIM_WIDTH // 2 - door_w // 2
-        pygame.draw.rect(bg, (40,40,40), (door_x, 0, door_w, door_h))
-        for i in range(0, door_w, 15):
-            pygame.draw.line(bg, (60,60,60), (door_x + i, 0), (door_x + i, door_h), 1)
-        pygame.draw.rect(bg, STRIPE_YELLOW, (door_x, 0, door_w, door_h), 3)
+        
+        # 1. Gradient Wall
+        floor_y = SCREEN_HEIGHT
+        for y in range(floor_y):
+            ratio = y / floor_y
+            c = (int(25 + 15*ratio), int(30 + 15*ratio), int(35 + 15*ratio))
+            pygame.draw.line(bg, c, (0, y), (SCREEN_WIDTH, y))
+
+        # 2. Heavy Industrial Pillars
+        for i in range(int(SCREEN_WIDTH / 200) + 1):
+            x = i * 200
+            pygame.draw.rect(bg, (15, 18, 20), (x, 0, 40, floor_y))
+            pygame.draw.rect(bg, (40, 45, 50), (x+5, 0, 30, floor_y))
+            # Rivets
+            for ry in range(20, floor_y, 50):
+                pygame.draw.circle(bg, (25, 30, 35), (x+10, ry), 3)
+                pygame.draw.circle(bg, (25, 30, 35), (x+30, ry), 3)
+
+        # 3. Overhead Truss / Conveyor Supports
+        truss_y = 80
+        pygame.draw.rect(bg, (20, 22, 25), (0, truss_y - 20, SCREEN_WIDTH, 40))
+        for x in range(0, SCREEN_WIDTH, 40):
+            pygame.draw.line(bg, (50, 55, 60), (x, truss_y - 20), (x+20, truss_y + 20), 2)
+            pygame.draw.line(bg, (50, 55, 60), (x+20, truss_y - 20), (x, truss_y + 20), 2)
+        pygame.draw.rect(bg, (60, 65, 70), (0, truss_y + 15, SCREEN_WIDTH, 5))
+
+        # 4. Floor (Deep Warehouse)
+        floor_start = SCREEN_HEIGHT - 150
+        floor_rect = pygame.Rect(0, floor_start, SCREEN_WIDTH, 150)
+        bg.fill((30, 32, 35), floor_rect)
+        for _ in range(5000):
+            c = random.choice([(40, 42, 45), (25, 27, 30)])
+            bg.set_at((random.randint(0, SCREEN_WIDTH - 1), random.randint(floor_start, SCREEN_HEIGHT - 1)), c)
+        
+        # Hazard Zone for Tree
+        zone_rect = pygame.Rect(50, floor_start + 20, self.SIM_WIDTH - 100, 100)
+        pygame.draw.rect(bg, (35, 35, 40), zone_rect, border_radius=10)
+        pygame.draw.rect(bg, (60, 60, 60), zone_rect, 2, border_radius=10)
+        for i in range(zone_rect.left, zone_rect.right, 40):
+            p1 = (i, zone_rect.bottom)
+            p2 = (i + 20, zone_rect.bottom)
+            p3 = (i + 30, zone_rect.bottom + 10)
+            p4 = (i + 10, zone_rect.bottom + 10)
+            pygame.draw.polygon(bg, STRIPE_YELLOW, [p1, p2, p3, p4])
+
+        # 5. Volumetric Lighting
         light_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        for lx, ly in light_fixtures:
-            points = [(lx - 30, ly), (lx + 30, ly), (lx + 100, SCREEN_HEIGHT), (lx - 100, SCREEN_HEIGHT)]
-            pygame.draw.polygon(light_layer, LIGHT_RAY_COLOR, points)
+        light_layer.fill((0, 0, 0, 60))
+        
+        # Main Spotlights
+        for i in range(150, self.SIM_WIDTH, 250):
+            lx, ly = i, truss_y + 20
+            cone_color = (200, 255, 220) # Greenish tint for routing
+            
+            points = [
+                (lx - 20, ly), (lx + 20, ly),
+                (lx + 150, floor_start + 50), (lx - 150, floor_start + 50)
+            ]
+            pygame.draw.polygon(light_layer, (*cone_color, 10), points)
+            
+            points_core = [
+                (lx - 5, ly), (lx + 5, ly),
+                (lx + 80, floor_start + 50), (lx - 80, floor_start + 50)
+            ]
+            pygame.draw.polygon(light_layer, (*cone_color, 20), points_core)
+            
+            # Fixture
+            pygame.draw.rect(bg, (20, 20, 20), (lx - 15, ly - 5, 30, 10))
+            pygame.draw.ellipse(bg, (220, 255, 220), (lx - 10, ly, 20, 6))
+
         bg.blit(light_layer, (0,0))
         return bg
 
     def _draw_shelf_unit(self, surf, x, y, w, h, rows, cols):
-        for r in range(rows):
-            ry = y + r * (h/rows)
-            for c in range(cols):
-                cx = x + c * (w/cols)
-                shelf_rect = pygame.Rect(cx, ry, w/cols, h/rows)
-                pygame.draw.rect(surf, (40,45,50), shelf_rect, 1)
-                if random.random() > 0.2:
-                    box_w = random.randint(10, int(w/cols - 5))
-                    box_h = random.randint(5, int(h/rows - 5))
-                    box_x = cx + random.randint(2, int(w/cols - box_w - 2))
-                    box_y = ry + int(h/rows - box_h - 2)
-                    color = random.choice([BOX_COLOR_1, BOX_COLOR_2, (160, 110, 50)])
-                    pygame.draw.rect(surf, color, (box_x, box_y, box_w, box_h))
+        # Deprecated in favor of new background, but kept if needed for legacy calls
+        pass
 
     def _draw_pillar(self, surf, x, y, w, h):
-        pygame.draw.rect(surf, (90, 95, 100), (x+w, y, 10, h))
-        pygame.draw.rect(surf, (110, 115, 120), (x, y, w, h))
+        # Deprecated
+        pass
 
     def _recalculate_layout(self, node, x, y, level, width_spread):
         if node is None: return

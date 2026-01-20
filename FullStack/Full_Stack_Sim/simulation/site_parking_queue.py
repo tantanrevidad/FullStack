@@ -349,6 +349,10 @@ class ParkingQueueSimulation:
         if not plate:
             self.lcd.update_status("ERR: NO INPUT")
             return
+        
+        if len(plate) > 10:
+            self.lcd.update_status("ERR: MAX 10 CHARS")
+            return
             
         receipt = self.logic.enqueue(plate)
         if receipt['type'] in ['OVERFLOW', 'DUPLICATE']:

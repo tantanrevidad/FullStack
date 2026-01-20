@@ -4,8 +4,8 @@ import random
 from settings import *
 from core.ui import HandheldChassis, LCDDisplay, RoundButton, Button
 
+# ... [Keep Node, ExpressionTreeManager, and DroneSprite classes unchanged] ...
 class Node:
-    """Node for Expression Tree."""
     def __init__(self, value):
         self.value = value
         self.left = None
@@ -14,20 +14,13 @@ class Node:
         self.target_x = 0; self.target_y = 0
 
 class ExpressionTreeManager:
-    """
-    Backend Logic for Expression Tree.
-    Parses infix expressions to postfix and builds the tree.
-    """
     def __init__(self):
         self.root = None
         self.current_depth = 0
         self.precedence = {'+': 1, '-': 1, '*': 2, '/': 2, '^': 3}
-
     def _is_operator(self, char):
         return char in "+-*/^"
-
     def _infix_to_postfix(self, expression):
-        """Shunting-yard algorithm implementation."""
         stack = []; output = []
         for char in expression:
             if char.isalnum():
@@ -52,9 +45,7 @@ class ExpressionTreeManager:
         while stack:
             output.append(stack.pop())
         return output
-
     def build_from_expression(self, expression):
-        """Builds the tree from an infix string."""
         expression = "".join(filter(lambda x: not x.isspace(), expression))
         if not expression: return False
         try:
@@ -76,7 +67,6 @@ class ExpressionTreeManager:
             return True
         except (IndexError, Exception):
             return False
-
     def _get_label_from_index(self, n):
         label = ""
         if n < 0: return ""
@@ -86,7 +76,6 @@ class ExpressionTreeManager:
             if n < 0:
                 break
         return label
-
     def build_from_levels(self, num_levels):
         """Generates a perfect binary tree of a given depth."""
         if not 1 <= num_levels <= 5: return False
@@ -105,34 +94,28 @@ class ExpressionTreeManager:
                 queue.append(current.right)
         self.current_depth = num_levels - 1
         return True
-
     def _calculate_depth(self, node, depth):
         if node is None: return
         self.current_depth = max(self.current_depth, depth)
         self._calculate_depth(node.left, depth + 1)
         self._calculate_depth(node.right, depth + 1)
-
     def get_traversals(self):
         return {
             "TLR": self._get_pre_order(self.root),
             "LTR": self._get_in_order(self.root),
             "LRT": self._get_post_order(self.root)
         }
-
     def _get_pre_order(self, node):
         if not node: return []
         return [node] + self._get_pre_order(node.left) + self._get_pre_order(node.right)
-
     def _get_in_order(self, node):
         if not node: return []
         return self._get_in_order(node.left) + [node] + self._get_in_order(node.right)
-
     def _get_post_order(self, node):
         if not node: return []
         return self._get_post_order(node.left) + self._get_post_order(node.right) + [node]
 
 class DroneSprite(pygame.sprite.Sprite):
-    """Scanner drone for traversing the expression tree."""
     def __init__(self, x, y):
         super().__init__()
         self.pos_x = float(x); self.pos_y = float(y)
@@ -145,7 +128,6 @@ class DroneSprite(pygame.sprite.Sprite):
         self.image = pygame.Surface((1,1))
         self.rect = self.image.get_rect(center=(x,y))
         self.resize(40)
-
     def resize(self, size):
         s = int(size)
         if s < 15: s = 15
@@ -179,12 +161,10 @@ class DroneSprite(pygame.sprite.Sprite):
             end_x = center + math.cos(rad) * arm_length
             end_y = center + math.sin(rad) * arm_length
             pygame.draw.line(self.rotor_image, blade_color, (end_x - blade_length, end_y), (end_x + blade_length, end_y), 2)
-
     def move_to(self, target_pos, callback=None):
         self.target_x, self.target_y = target_pos
         self.on_finish_callback = callback
         self.is_moving = True
-
     def update(self):
         self.rotor_angle = (self.rotor_angle + 45) % 360
         if self.is_moving:
@@ -204,36 +184,27 @@ class DroneSprite(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=(int(self.pos_x), int(self.pos_y)))
 
 class ExpressionTreeSimulation:
-    """
-    Visualization for Expression Tree Module.
-    Renders the tree layout and handles parsing/traversal interactions.
-    """
     def __init__(self, screen):
         self.screen = screen
         self.logic = ExpressionTreeManager()
         self.all_sprites = pygame.sprite.Group()
-        
         self.ui_x = 750; self.ui_w = 250
         self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
         self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
         self.lcd.update_status("EXPRESSION PARSER")
-        
         btn_cx = self.ui_x + self.ui_w // 2
         gen_y = 280; btn_radius = 40; h_gap = 15
         self.btn_gen_levels = RoundButton(btn_cx - btn_radius - h_gap, gen_y, btn_radius, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "LEVELS", self.action_gen_levels)
         self.btn_gen_expr = RoundButton(btn_cx + btn_radius + h_gap, gen_y, btn_radius, BTN_ALT_GREEN_BASE, BTN_ALT_GREEN_LIGHT, "EXPR", self.action_gen_expr)
         self.btn_analyze = RoundButton(btn_cx, 390, 40, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "TRAVERSE", self.action_open_analysis_menu)
         self.btn_clear = RoundButton(btn_cx, 490, 40, BTN_RED_BASE, BTN_RED_LIGHT, "CLEAR", self.action_clear)
-        
         self.SIM_WIDTH = 750; self.TOP_MARGIN = 120; self.BOTTOM_MARGIN = 50
         self.ROOT_X = self.SIM_WIDTH // 2; self.current_node_size = 80; self.belt_offset = 0
         self.show_analysis_menu = False; self.manifest_data = None; self.pending_report_data = None
-        
         menu_btn_w, menu_btn_h = 200, 40; menu_cx = self.SIM_WIDTH // 2; menu_start_y = 250
         self.menu_btn_tlr = Button(menu_cx - menu_btn_w//2, menu_start_y, menu_btn_w, menu_btn_h, "TLR (Pre-Order)", lambda: self.action_traverse("TLR"))
         self.menu_btn_ltr = Button(menu_cx - menu_btn_w//2, menu_start_y + 50, menu_btn_w, menu_btn_h, "LTR (In-Order)", lambda: self.action_traverse("LTR"))
         self.menu_btn_lrt = Button(menu_cx - menu_btn_w//2, menu_start_y + 100, menu_btn_w, menu_btn_h, "LRT (Post-Order)", lambda: self.action_traverse("LRT"))
-        
         self.is_traversing = False; self.traversal_path = []; self.traversal_index = 0
         self.highlighted_node = None; self.highlight_timer = 0
         self.drone = DroneSprite(-50, -50); self.all_sprites.add(self.drone)
@@ -241,47 +212,83 @@ class ExpressionTreeSimulation:
 
     def _generate_background(self):
         bg = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        bg.fill(WALL_BASE_COLOR)
-        self._draw_shelf_unit(bg, 0, 100, SCREEN_WIDTH, SCREEN_HEIGHT / 2, 8, 25)
-        for i in range(7):
-            self._draw_pillar(bg, 50 + i * 150, 0, 20, SCREEN_HEIGHT)
-        floor_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-        floor_surf.set_colorkey((0,0,0))
-        for _ in range(15000):
-            color = random.choice([CONCRETE_NOISE_1, CONCRETE_NOISE_2])
-            floor_surf.set_at((random.randint(0, SCREEN_WIDTH - 1), random.randint(0, SCREEN_HEIGHT - 1)), color)
-        bg.blit(floor_surf, (0, 0))
-        pygame.draw.rect(bg, (40,45,50), (0,0,SCREEN_WIDTH, 80))
-        light_fixtures = []
-        for i in range(0, SCREEN_WIDTH, 150):
-            pygame.draw.rect(bg, (20,22,25), (i, 30, 100, 10))
-            pygame.draw.rect(bg, FLUORESCENT_LIGHT, (i+2, 32, 96, 6))
-            light_fixtures.append((i+50, 40))
+        
+        # 1. Gradient Wall (Dark Slate)
+        floor_y = SCREEN_HEIGHT
+        for y in range(floor_y):
+            ratio = y / floor_y
+            c = (int(15 + 10*ratio), int(20 + 15*ratio), int(25 + 20*ratio))
+            pygame.draw.line(bg, c, (0, y), (SCREEN_WIDTH, y))
+
+        # 2. Server Racks (Background)
+        for i in range(0, SCREEN_WIDTH, 120):
+            rack_w = 80
+            rack_h = 400
+            rack_x = i + 20
+            rack_y = 100
+            
+            # Rack Body
+            pygame.draw.rect(bg, (10, 10, 12), (rack_x, rack_y, rack_w, rack_h))
+            pygame.draw.rect(bg, (40, 40, 45), (rack_x, rack_y, rack_w, rack_h), 2)
+            
+            # Blinking Lights Pattern
+            for ry in range(rack_y + 10, rack_y + rack_h, 15):
+                if random.random() > 0.3:
+                    color = random.choice([(0, 255, 0), (255, 0, 0), (0, 100, 255)])
+                    pygame.draw.rect(bg, color, (rack_x + 10, ry, 4, 4))
+                if random.random() > 0.3:
+                    color = random.choice([(0, 255, 0), (255, 0, 0), (0, 100, 255)])
+                    pygame.draw.rect(bg, color, (rack_x + 20, ry, 4, 4))
+                pygame.draw.line(bg, (30, 30, 35), (rack_x, ry+10), (rack_x+rack_w, ry+10), 1)
+
+        # 3. Overhead Cabling
+        truss_y = 60
+        pygame.draw.rect(bg, (20, 20, 20), (0, truss_y, SCREEN_WIDTH, 20))
+        for x in range(0, SCREEN_WIDTH, 30):
+            pygame.draw.line(bg, (50, 50, 50), (x, truss_y), (x, truss_y+20), 2)
+            # Hanging cables
+            if random.random() > 0.8:
+                h = random.randint(20, 50)
+                pygame.draw.line(bg, (10, 10, 10), (x+15, truss_y+20), (x+15, truss_y+20+h), 2)
+
+        # 4. Floor (Tiled Access Floor)
+        floor_start = SCREEN_HEIGHT - 100
+        floor_rect = pygame.Rect(0, floor_start, SCREEN_WIDTH, 100)
+        bg.fill((40, 45, 50), floor_rect)
+        
+        # Grid Pattern
+        for x in range(0, SCREEN_WIDTH, 50):
+            pygame.draw.line(bg, (30, 35, 40), (x, floor_start), (x, SCREEN_HEIGHT), 1)
+        for y in range(floor_start, SCREEN_HEIGHT, 30):
+            pygame.draw.line(bg, (30, 35, 40), (0, y), (SCREEN_WIDTH, y), 1)
+
+        # 5. Volumetric Lighting (Cool Blue)
         light_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        for lx, ly in light_fixtures:
-            points = [(lx - 30, ly), (lx + 30, ly), (lx + 100, SCREEN_HEIGHT), (lx - 100, SCREEN_HEIGHT)]
-            pygame.draw.polygon(light_layer, LIGHT_RAY_COLOR, points)
+        light_layer.fill((0, 0, 0, 40))
+        
+        for i in range(100, self.SIM_WIDTH, 200):
+            lx, ly = i, truss_y + 20
+            cone_color = (180, 220, 255)
+            
+            points = [
+                (lx - 10, ly), (lx + 10, ly),
+                (lx + 100, floor_start + 20), (lx - 100, floor_start + 20)
+            ]
+            pygame.draw.polygon(light_layer, (*cone_color, 15), points)
+            
+            # Fixture
+            pygame.draw.rect(bg, (200, 200, 255), (lx - 20, ly - 5, 40, 5))
+
         bg.blit(light_layer, (0,0))
         return bg
 
     def _draw_shelf_unit(self, surf, x, y, w, h, rows, cols):
-        for r in range(rows):
-            ry = y + r * (h/rows)
-            for c in range(cols):
-                cx = x + c * (w/cols)
-                shelf_rect = pygame.Rect(cx, ry, w/cols, h/rows)
-                pygame.draw.rect(surf, (40,45,50), shelf_rect, 1)
-                if random.random() > 0.2:
-                    box_w = random.randint(10, int(w/cols - 5))
-                    box_h = random.randint(5, int(h/rows - 5))
-                    box_x = cx + random.randint(2, int(w/cols - box_w - 2))
-                    box_y = ry + int(h/rows - box_h - 2)
-                    color = random.choice([BOX_COLOR_1, BOX_COLOR_2, (160, 110, 50)])
-                    pygame.draw.rect(surf, color, (box_x, box_y, box_w, box_h))
+        # Deprecated
+        pass
 
     def _draw_pillar(self, surf, x, y, w, h):
-        pygame.draw.rect(surf, (90, 95, 100), (x+w, y, 10, h))
-        pygame.draw.rect(surf, (110, 115, 120), (x, y, w, h))
+        # Deprecated
+        pass
 
     def _recalculate_layout(self, node, x, y, level, width_spread):
         if node is None: return

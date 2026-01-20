@@ -7,10 +7,6 @@ from core.ui import HandheldChassis, LCDDisplay, RoundButton
 BOX_SIZES = { 'small': (40, 40), 'medium': (60, 50), 'large': (80, 60) }
 
 class BoxSprite(CrateSprite):
-    """
-    Represents a package on the conveyor belt.
-    Handles gravity physics for dropping from the hopper and bouncing on the belt.
-    """
     def __init__(self, x, y, data_label, size_type='medium'):
         self.size_type = size_type; self.width, self.height = BOX_SIZES[self.size_type]
         super().__init__(x, y, data_label)
@@ -20,7 +16,6 @@ class BoxSprite(CrateSprite):
         self.image = self.original_image.copy(); self.rect = self.image.get_rect(center=(x, y))
 
     def generate_box_surface(self):
-        """Draws a cardboard box with tape and a label."""
         surf = pygame.Surface((self.width + 6, self.height + 6), pygame.SRCALPHA)
         pygame.draw.rect(surf, (0, 0, 0, 60), (5, 5, self.width, self.height), border_radius=4)
         box_rect = pygame.Rect(2, 2, self.width, self.height)
@@ -32,11 +27,9 @@ class BoxSprite(CrateSprite):
         surf.blit(self.label_surf, (label_x, label_y)); return surf
 
     def drop_to(self, target_y, callback):
-        """Initiates the drop animation."""
         self.is_dropping = True; self.target_y_for_drop = target_y; self.drop_callback = callback
 
     def update(self):
-        """Handles physics (drop/bounce) and linear movement."""
         if self.is_dropping:
             self.drop_speed += self.gravity; self.pos_y += self.drop_speed
             if self.pos_y >= self.target_y_for_drop: self.pos_y = self.target_y_for_drop; self.is_dropping = False; self.is_bouncing = True
@@ -57,17 +50,11 @@ class BoxSprite(CrateSprite):
         self.image = self.original_image
 
 class Node:
-    """Standard Linked List Node."""
     def __init__(self, label): self.label = label; self.next = None
 
 class LinkedListManager:
-    """
-    Backend Logic for Singly Linked List.
-    Manages nodes and pointers, returning receipts for visualization.
-    """
     def __init__(self, capacity=10): self.head = None; self.size = 0; self.capacity = capacity
     def is_full(self): return self.size >= self.capacity
-    
     def insert_at(self, index, label):
         if self.is_full(): return {"type": "ERROR", "message": "CONVEYOR FULL"}
         if index < 0 or index > self.size: return {"type": "ERROR", "message": "INVALID INDEX"}
@@ -78,7 +65,6 @@ class LinkedListManager:
             for _ in range(index - 1): current = current.next
             new_node.next = current.next; current.next = new_node
         self.size += 1; return {"type": "INSERT", "label": label, "index": index}
-
     def remove_box(self, label):
         if not self.head: return [{"type": "ERROR", "message": "CONVEYOR EMPTY"}]
         if self.head.label == label:
@@ -90,7 +76,6 @@ class LinkedListManager:
             removed_node = current.next; current.next = removed_node.next; self.size -= 1
             return [{"type": "REMOVE", "label": removed_node.label, "index": index + 1}]
         return [{"type": "ERROR", "message": "NOT FOUND"}]
-
     def find_box(self, label):
         current = self.head
         while current:
@@ -99,25 +84,18 @@ class LinkedListManager:
         return False
 
 class ConveyorSimulation:
-    """
-    Visualization for Linked List.
-    Renders a conveyor belt and handles insertion/removal animations.
-    """
     def __init__(self, screen):
         self.screen = screen; self.logic = LinkedListManager(capacity=10)
         self.all_sprites = pygame.sprite.Group(); self.crates_group = pygame.sprite.Group()
         self.placement_mode = False; self.label_to_place = ""; self.placement_markers = []
-        
         self.ui_x = 750; self.ui_w = 250
         self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
         self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
         self.lcd.update_status("CONVEYOR OPS")
-        
         btn_cx = self.ui_x + self.ui_w // 2
         self.btn_append = RoundButton(btn_cx, 260, 40, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "APPEND", self.action_append)
         self.btn_insert = RoundButton(btn_cx, 350, 40, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "INSERT AT", self.action_insert_at)
         self.btn_remove = RoundButton(btn_cx, 440, 40, BTN_RED_BASE, BTN_RED_LIGHT, "REMOVE", self.action_remove)
-        
         self.visual_list = []; self.is_animating = False; self.animation_lock_count = 0
         self.BELT_Y = SCREEN_HEIGHT - 100; self.SIMULATION_WIDTH = 750
         self.HOPPER_X = self.SIMULATION_WIDTH / 2; self.HOPPER_Y = -100
@@ -242,16 +220,44 @@ class ConveyorSimulation:
 
     def action_append(self):
         if self.is_animating or self.placement_mode: return
-        label = self.lcd.text.upper()
-        if not label: self.lcd.update_status("ERR: NO INPUT"); return
+        
+        # --- VALIDATION ---
+        text = self.lcd.text
+        try:
+            val = int(text)
+        except ValueError:
+            self.lcd.update_status("ERR: INTEGERS ONLY")
+            return
+
+        if val < -999 or val > 999:
+            self.lcd.update_status("ERR: -999 TO 999")
+            return
+            
+        label = str(val)
+        # ------------------
+
         if self.logic.find_box(label): self.lcd.update_status("ERR: DUPLICATE"); return
         self.execute_insertion(label, len(self.visual_list))
 
     def action_insert_at(self):
         if self.is_animating: return
         if self.placement_mode: self.placement_mode = False; self.lcd.update_status("CANCELED"); return
-        label = self.lcd.text.upper()
-        if not label: self.lcd.update_status("ERR: NO LABEL"); return
+        
+        # --- VALIDATION ---
+        text = self.lcd.text
+        try:
+            val = int(text)
+        except ValueError:
+            self.lcd.update_status("ERR: INTEGERS ONLY")
+            return
+
+        if val < -999 or val > 999:
+            self.lcd.update_status("ERR: -999 TO 999")
+            return
+            
+        label = str(val)
+        # ------------------
+
         if self.logic.find_box(label): self.lcd.update_status("ERR: DUPLICATE"); return
         if self.logic.is_full(): self.lcd.update_status("ERR: CONVEYOR FULL"); return
         self.placement_mode = True; self.label_to_place = label; self.lcd.update_status("CLICK A SLOT...")

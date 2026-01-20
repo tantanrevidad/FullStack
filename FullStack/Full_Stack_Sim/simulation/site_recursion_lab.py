@@ -1,26 +1,20 @@
 import pygame
 import random
+import math  # Added math import for lighting calculations
 from settings import *
 from core.ui import HandheldChassis, LCDDisplay, RoundButton, Button
 
+# ... [Keep RecursionManager, DiskSprite, and MagneticCraneSprite classes unchanged] ...
 class RecursionManager:
-    """
-    Backend Logic for Recursion (Tower of Hanoi).
-    Generates the sequence of moves to solve the puzzle.
-    """
     def __init__(self):
         self.num_disks = 0
-
     def generate_moves_from_current_state(self, num_disks, current_pegs, destination_peg):
-        """Calculates moves to solve Hanoi from an arbitrary state."""
         self.num_disks = num_disks
         moves = []
-        
         def find_disk(disk_val, pegs):
             for peg_name, disk_list in pegs.items():
                 if disk_val in disk_list: return peg_name
             return None
-            
         def _solve(n, dest):
             if n == 0: return
             src = find_disk(n, current_pegs)
@@ -33,12 +27,10 @@ class RecursionManager:
                 current_pegs[src].remove(n)
                 current_pegs[dest].append(n)
                 _solve(n - 1, dest)
-                
         _solve(num_disks, destination_peg)
         return moves
 
 class DiskSprite(pygame.sprite.Sprite):
-    """Visual representation of a Hanoi disk."""
     def __init__(self, value, max_value, height, color):
         super().__init__()
         self.value = value
@@ -54,7 +46,6 @@ class DiskSprite(pygame.sprite.Sprite):
         self.bounce_factor = -0.4
         self.image = self._create_surface()
         self.rect = self.image.get_rect(midbottom=(0,0))
-
     def _create_surface(self):
         padding = 8
         surf = pygame.Surface((self.width + padding, self.height + padding), pygame.SRCALPHA)
@@ -82,18 +73,19 @@ class DiskSprite(pygame.sprite.Sprite):
         surf.blit(shadow_surf, (text_rect.x + 2, text_rect.y + 2))
         surf.blit(text_surf, text_rect)
         return surf
-
     def move_to(self, target_pos, callback=None):
         self.target_x, self.target_y = target_pos; self.is_moving = True; self.on_finish_callback = callback
-
     def drop_to(self, target_pos, callback=None):
         self.target_x, self.target_y = target_pos
         self.is_dropping = True
         self.on_finish_callback = callback
-
     def update(self, speed_multiplier=1.0):
+        padding = 8
+        offset_x = padding // 2
+        offset_y = padding
         if self.attached_to:
-            self.rect.center = (int(self.attached_to.pos_x), self.attached_to.rect.bottom); return
+            self.rect.midtop = (int(self.attached_to.pos_x + offset_x), self.attached_to.rect.bottom)
+            return
         if self.is_dropping:
             self.drop_velocity += self.gravity
             self.pos_y += self.drop_velocity
@@ -102,7 +94,7 @@ class DiskSprite(pygame.sprite.Sprite):
                 self.is_dropping = False
                 self.is_bouncing = True
                 self.drop_velocity *= self.bounce_factor
-            self.rect.midbottom = (int(self.pos_x), int(self.pos_y))
+            self.rect.midbottom = (int(self.pos_x + offset_x), int(self.pos_y + offset_y))
             return
         if self.is_bouncing:
             self.drop_velocity += self.gravity
@@ -115,9 +107,11 @@ class DiskSprite(pygame.sprite.Sprite):
                     cb = self.on_finish_callback
                     self.on_finish_callback = None
                     cb()
-            self.rect.midbottom = (int(self.pos_x), int(self.pos_y))
+            self.rect.midbottom = (int(self.pos_x + offset_x), int(self.pos_y + offset_y))
             return
-        if not self.is_moving: return
+        if not self.is_moving:
+            self.rect.midbottom = (int(self.pos_x + offset_x), int(self.pos_y + offset_y))
+            return
         dx = self.target_x - self.pos_x; dy = self.target_y - self.pos_y
         dist_sq = dx**2 + dy**2
         effective_speed = MIN_SPEED * speed_multiplier
@@ -127,12 +121,9 @@ class DiskSprite(pygame.sprite.Sprite):
         else:
             effective_lerp = LERP_FACTOR * speed_multiplier
             self.pos_x += dx * effective_lerp; self.pos_y += dy * effective_lerp
-        self.rect.midbottom = (int(self.pos_x), int(self.pos_y))
+        self.rect.midbottom = (int(self.pos_x + offset_x), int(self.pos_y + offset_y))
 
 class MagneticCraneSprite(pygame.sprite.Sprite):
-    """
-    Animated crane that moves horizontally and hoists disks vertically.
-    """
     def __init__(self, x, y):
         super().__init__()
         self.trolley_width, self.trolley_height = 80, 25
@@ -146,7 +137,6 @@ class MagneticCraneSprite(pygame.sprite.Sprite):
         self.magnet_active = False
         self.image = self._create_surface()
         self.rect = self.image.get_rect(midtop=(x, y))
-
     def _create_surface(self):
         total_height = self.trolley_height + self.cable_length + self.magnet_height
         surf = pygame.Surface((self.trolley_width, total_height), pygame.SRCALPHA)
@@ -167,17 +157,13 @@ class MagneticCraneSprite(pygame.sprite.Sprite):
             pygame.draw.rect(glow_surf, (255, 200, 0, 100), glow_surf.get_rect(), border_radius=8)
             surf.blit(glow_surf, (glow_rect.x - magnet_rect.x, glow_rect.y - magnet_rect.y))
         return surf
-
     def set_magnet(self, active):
         if self.magnet_active != active: self.magnet_active = active; self.image = self._create_surface()
-
     def move_to(self, target_pos, callback=None):
         self.target_x, self.target_y = target_pos; self.is_moving = True; self.move_callback = callback
-
     def set_hoist_length(self, length, callback=None):
         self.target_cable_length = max(self.min_cable_length, length)
         self.is_hoisting = True; self.hoist_callback = callback
-
     def update(self, speed_multiplier=1.0):
         moved = False
         if self.is_moving:
@@ -201,10 +187,6 @@ class MagneticCraneSprite(pygame.sprite.Sprite):
             self.rect = self.image.get_rect(midtop=(int(self.pos_x), int(self.pos_y)))
 
 class RecursionSimulation:
-    """
-    Visualization for Recursion Module.
-    Renders the Tower of Hanoi setup and manages crane animations.
-    """
     def __init__(self, screen):
         self.screen = screen; self.logic = RecursionManager()
         self.SIM_WIDTH = 750; self.FLOOR_Y = SCREEN_HEIGHT - 80
@@ -213,16 +195,21 @@ class RecursionSimulation:
         self.all_sprites = pygame.sprite.Group(); self.disks = pygame.sprite.Group()
         self.crane = MagneticCraneSprite(self.SIM_WIDTH / 2, self.TRAVEL_Y)
         self.all_sprites.add(self.crane)
-        
         self.ui_x = 750; self.ui_w = 250
         self.chassis = HandheldChassis(self.ui_x + 10, 20, self.ui_w - 20, SCREEN_HEIGHT - 40)
         self.lcd = LCDDisplay(self.ui_x + 35, 80, self.ui_w - 70, 100)
-        
         btn_cx = self.ui_x + self.ui_w // 2
         self.btn_load = RoundButton(btn_cx, 280, 45, BTN_BLUE_BASE, BTN_BLUE_LIGHT, "LOAD", self.action_load)
         self.btn_solve = RoundButton(btn_cx, 390, 45, BTN_GREEN_BASE, BTN_GREEN_LIGHT, "SOLVE", self.action_solve)
         self.btn_reset = RoundButton(btn_cx, 500, 45, BTN_RED_BASE, BTN_RED_LIGHT, "RESET", self.action_reset)
-        
+        self.speed_levels = [0.5, 1.0, 2.0, 4.0, 8.0]
+        self.speed_index = 1
+        self.speed_multiplier = self.speed_levels[self.speed_index]
+        speed_btn_y = self.chassis.rect.bottom - 60
+        speed_btn_w = 80
+        speed_btn_h = 30
+        self.btn_speed_down = Button(btn_cx - speed_btn_w - 5, speed_btn_y, speed_btn_w, speed_btn_h, "Speed -", self.decrease_speed)
+        self.btn_speed_up = Button(btn_cx + 5, speed_btn_y, speed_btn_w, speed_btn_h, "Speed +", self.increase_speed)
         self.game_state = 'IDLE'; self.selected_disk = None; self.source_peg = None
         self.move_count = 0; self.auto_solve_queue = []; self.show_win_manifest = False
         self.disks_to_load = []
@@ -233,43 +220,133 @@ class RecursionSimulation:
         self.action_reset()
 
     def _generate_static_background(self):
-        bg = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT)); bg.fill((40, 45, 50))
-        pygame.draw.rect(bg, (180, 185, 190), (0, 0, SCREEN_WIDTH, self.FLOOR_Y))
+        bg = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+        
+        # 1. Wall with Gradient (Darker at top)
+        for y in range(self.FLOOR_Y):
+            ratio = y / self.FLOOR_Y
+            c = (int(20 + 20*ratio), int(25 + 20*ratio), int(30 + 20*ratio))
+            pygame.draw.line(bg, c, (0, y), (SCREEN_WIDTH, y))
+
+        # 2. Shelves (Background details)
         for i in range(4, 0, -1):
-            alpha = 50 + (i * 30)
-            shelf_color = (110, 115, 120, alpha); box_color = (160, 110, 50, alpha)
-            for y in range(150, self.FLOOR_Y, 60):
+            alpha = 30 + (i * 20)
+            shelf_color = (80, 85, 90)
+            box_color = (120, 90, 40)
+            for y in range(150, self.FLOOR_Y, 70):
                 pygame.draw.line(bg, shelf_color, (0, y), (SCREEN_WIDTH, y), 2)
-                for x in range(20, SCREEN_WIDTH, 100):
-                    if random.random() > 0.4: pygame.draw.rect(bg, box_color, (x + i*5 + random.randint(-10,10), y - 40, 30, 40))
-        for i in range(int(SCREEN_WIDTH / 110) + 1):
-            x = i * 110
-            pygame.draw.rect(bg, (140, 145, 150), (x, 0, 25, self.FLOOR_Y))
-            pygame.draw.rect(bg, (120, 125, 130), (x+25, 0, 5, self.FLOOR_Y))
-        pygame.draw.rect(bg, (60,65,70), (0, 0, SCREEN_WIDTH, self.GANTRY_Y + 20))
-        pygame.draw.rect(bg, (50,55,60), (0, self.GANTRY_Y, SCREEN_WIDTH, 15))
-        pygame.draw.rect(bg, (90,95,100), (0, self.GANTRY_Y, SCREEN_WIDTH, 15), 2)
+                for x in range(20, SCREEN_WIDTH, 120):
+                    if random.random() > 0.5:
+                        bx = x + i*10 + random.randint(-10, 10)
+                        by = y - 35
+                        pygame.draw.rect(bg, box_color, (bx, by, 30, 35))
+                        pygame.draw.rect(bg, (0,0,0), (bx, by, 30, 35), 1)
+
+        # 3. Vertical Pillars (Structure)
+        for i in range(int(SCREEN_WIDTH / 150) + 1):
+            x = i * 150
+            pygame.draw.rect(bg, (10, 12, 15), (x+30, 0, 10, self.FLOOR_Y)) 
+            pygame.draw.rect(bg, (50, 55, 60), (x, 0, 30, self.FLOOR_Y))
+            for py in range(20, self.FLOOR_Y, 40):
+                pygame.draw.circle(bg, (30, 35, 40), (x+5, py), 2)
+                pygame.draw.circle(bg, (30, 35, 40), (x+25, py), 2)
+
+        # 4. Gantry Rail (Top)
+        pygame.draw.rect(bg, (20, 22, 25), (0, 0, SCREEN_WIDTH, self.GANTRY_Y + 30))
+        pygame.draw.rect(bg, (60, 65, 70), (0, self.GANTRY_Y, SCREEN_WIDTH, 20))
+        pygame.draw.line(bg, (100, 105, 110), (0, self.GANTRY_Y), (SCREEN_WIDTH, self.GANTRY_Y), 2)
+        pygame.draw.line(bg, (30, 35, 40), (0, self.GANTRY_Y+20), (SCREEN_WIDTH, self.GANTRY_Y+20), 2)
+
+        # 5. Floor
         floor_rect = pygame.Rect(0, self.FLOOR_Y, SCREEN_WIDTH, SCREEN_HEIGHT - self.FLOOR_Y)
-        bg.fill(FLOOR_COLOR, floor_rect)
-        for _ in range(8000):
-            color = random.choice([CONCRETE_NOISE_1, CONCRETE_NOISE_2])
-            bg.set_at((random.randint(0, SCREEN_WIDTH - 1), random.randint(self.FLOOR_Y, SCREEN_HEIGHT - 1)), color)
-        pygame.draw.line(bg, (0,0,0,80), (0, self.FLOOR_Y), (SCREEN_WIDTH, self.FLOOR_Y), 3)
+        bg.fill((30, 32, 35), floor_rect)
+        for _ in range(10000):
+            c = random.choice([(40, 42, 45), (25, 27, 30)])
+            bg.set_at((random.randint(0, SCREEN_WIDTH - 1), random.randint(self.FLOOR_Y, SCREEN_HEIGHT - 1)), c)
+        pygame.draw.line(bg, (10, 10, 10), (0, self.FLOOR_Y), (SCREEN_WIDTH, self.FLOOR_Y), 2)
+
+        # 6. Platforms (The "Pegs")
         for peg, x_pos in self.peg_coords.items():
-            platform_w, platform_h = 260, 20
-            base_rect = pygame.Rect(x_pos - platform_w/2, self.FLOOR_Y, platform_w, platform_h)
-            pygame.draw.rect(bg, (60,65,70), base_rect); pygame.draw.rect(bg, (90,95,100), base_rect, 2)
-            for i in range(0, platform_w, 20): pygame.draw.line(bg, STRIPE_YELLOW, (base_rect.left + i, base_rect.top), (base_rect.left + i - 10, base_rect.bottom), 3)
-            font = pygame.font.SysFont("Impact", 18); text_surf = font.render(peg, True, (200,200,200, 100))
-            bg.blit(text_surf, (x_pos - text_surf.get_width()/2, self.FLOOR_Y - 30))
+            plat_w = 240
+            plat_top_h = 15
+            plat_base_h = 25
+            
+            base_x = x_pos - plat_w // 2
+            
+            # Drop Shadow
+            shadow_surf = pygame.Surface((plat_w + 40, 20), pygame.SRCALPHA)
+            pygame.draw.ellipse(shadow_surf, (0, 0, 0, 150), (0, 0, plat_w + 40, 20))
+            bg.blit(shadow_surf, (base_x - 20, self.FLOOR_Y + plat_base_h - 10))
+
+            # Front Face
+            front_rect = pygame.Rect(base_x, self.FLOOR_Y, plat_w, plat_base_h)
+            pygame.draw.rect(bg, (50, 55, 60), front_rect)
+            pygame.draw.rect(bg, (30, 35, 40), front_rect, 2)
+            
+            # Hazard Stripes
+            clip_surf = pygame.Surface((plat_w, plat_base_h), pygame.SRCALPHA)
+            clip_surf.fill((0,0,0,0))
+            for i in range(-20, plat_w, 30):
+                pygame.draw.polygon(clip_surf, (255, 200, 0, 180), [
+                    (i, 0), (i+10, 0), (i-5, plat_base_h), (i-15, plat_base_h)
+                ])
+            bg.blit(clip_surf, front_rect.topleft)
+
+            # Top Surface
+            top_rect = pygame.Rect(base_x + 5, self.FLOOR_Y - plat_top_h, plat_w - 10, plat_top_h)
+            pygame.draw.rect(bg, (90, 95, 100), top_rect)
+            pygame.draw.rect(bg, (120, 125, 130), top_rect, 1)
+            
+            # Peg Label
+            label_bg_radius = 15
+            pygame.draw.circle(bg, (20, 20, 20), (int(x_pos), int(self.FLOOR_Y + plat_base_h/2)), label_bg_radius)
+            pygame.draw.circle(bg, (200, 200, 200), (int(x_pos), int(self.FLOOR_Y + plat_base_h/2)), label_bg_radius, 1)
+            
+            font = pygame.font.SysFont("Arial", 16, bold=True)
+            text_surf = font.render(peg, True, (255, 255, 255))
+            bg.blit(text_surf, (x_pos - text_surf.get_width()/2, self.FLOOR_Y + plat_base_h/2 - text_surf.get_height()/2))
+
+        # 7. Lighting Effects
         light_layer = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        for i in range(0, SCREEN_WIDTH, 150):
-            lx, ly = i + 75, 40
-            pygame.draw.rect(bg, FLUORESCENT_LIGHT, (lx - 40, ly-5, 80, 10))
-            points = [(lx, ly), (lx + 100, SCREEN_HEIGHT), (lx - 100, SCREEN_HEIGHT)]
-            pygame.draw.polygon(light_layer, (255, 255, 220, 15), points)
+        light_layer.fill((0, 0, 0, 80)) 
+
+        for x_pos in self.peg_coords.values():
+            lx, ly = x_pos, 40 
+            cone_color = (220, 230, 255)
+            
+            points = [
+                (lx - 10, ly), (lx + 10, ly),
+                (x_pos + 100, self.FLOOR_Y), (x_pos - 100, self.FLOOR_Y)
+            ]
+            pygame.draw.polygon(light_layer, (*cone_color, 15), points)
+            
+            points_inner = [
+                (lx - 5, ly), (lx + 5, ly),
+                (x_pos + 60, self.FLOOR_Y), (x_pos - 60, self.FLOOR_Y)
+            ]
+            pygame.draw.polygon(light_layer, (*cone_color, 25), points_inner)
+
+            spot_w, spot_h = 200, 40
+            spot_rect = pygame.Rect(x_pos - spot_w//2, self.FLOOR_Y - spot_h//2, spot_w, spot_h)
+            pygame.draw.ellipse(light_layer, (*cone_color, 40), spot_rect)
+            
+            pygame.draw.rect(bg, (20, 20, 20), (lx - 15, ly - 5, 30, 10))
+            pygame.draw.ellipse(bg, (200, 255, 255), (lx - 10, ly, 20, 6))
+
         bg.blit(light_layer, (0,0))
         return bg
+
+    def increase_speed(self):
+        if self.speed_index < len(self.speed_levels) - 1:
+            self.speed_index += 1
+            self.speed_multiplier = self.speed_levels[self.speed_index]
+            self.lcd.update_status(f"SPEED: {self.speed_multiplier}x")
+
+    def decrease_speed(self):
+        if self.speed_index > 0:
+            self.speed_index -= 1
+            self.speed_multiplier = self.speed_levels[self.speed_index]
+            self.lcd.update_status(f"SPEED: {self.speed_multiplier}x")
 
     def action_load(self):
         if self.game_state == 'ANIMATING': return
@@ -357,7 +434,8 @@ class RecursionSimulation:
     def animate_pickup(self):
         pickup_x = self.peg_coords[self.source_peg]
         disk_center_y = self.selected_disk.rect.centery
-        target_cable_len = disk_center_y - self.TRAVEL_Y - self.crane.trolley_height
+        disk_top_y = disk_center_y - self.DISK_HEIGHT / 2
+        target_cable_len = disk_top_y - self.TRAVEL_Y - self.crane.trolley_height - self.crane.magnet_height
         def on_rise(): self.game_state = 'DISK_SELECTED'; self.update_lcd_status()
         def on_attach(): self.selected_disk.attached_to = self.crane; self.crane.set_magnet(True); self.crane.set_hoist_length(self.crane.min_cable_length, callback=on_rise)
         def on_lower(): self.crane.set_hoist_length(target_cable_len, callback=on_attach)
@@ -366,27 +444,35 @@ class RecursionSimulation:
     def animate_place(self, dest_peg):
         dest_x = self.peg_coords[dest_peg]
         dest_y_bottom = self.FLOOR_Y - (len(self.visual_pegs[dest_peg]) * self.DISK_HEIGHT)
-        dest_y_center = dest_y_bottom - self.DISK_HEIGHT / 2
-        target_cable_len = dest_y_center - self.TRAVEL_Y - self.crane.trolley_height
+        disk_top_y = dest_y_bottom - self.DISK_HEIGHT
+        target_cable_len = disk_top_y - self.TRAVEL_Y - self.crane.trolley_height - self.crane.magnet_height
         def on_placed():
-            self.selected_disk.pos_x = dest_x; self.selected_disk.pos_y = dest_y_bottom
             self.visual_pegs[dest_peg].append(self.visual_pegs[self.source_peg].pop())
             self.selected_disk = None; self.source_peg = None; self.move_count += 1
             if not self.check_win_condition(): self.game_state = 'IDLE'
             self.update_lcd_status()
-        def on_detach(): self.selected_disk.attached_to = None; self.crane.set_magnet(False); self.crane.set_hoist_length(self.crane.min_cable_length, callback=on_placed)
+        def on_detach():
+            self.selected_disk.pos_x = dest_x
+            self.selected_disk.pos_y = dest_y_bottom
+            self.selected_disk.attached_to = None
+            self.crane.set_magnet(False)
+            self.crane.set_hoist_length(self.crane.min_cable_length, callback=on_placed)
         def on_lower(): self.crane.set_hoist_length(target_cable_len, callback=on_detach)
         self.crane.move_to((dest_x, self.TRAVEL_Y), callback=on_lower)
 
     def animate_return(self):
         dest_x = self.peg_coords[self.source_peg]
         dest_y_bottom = self.FLOOR_Y - ((len(self.visual_pegs[self.source_peg]) - 1) * self.DISK_HEIGHT)
-        dest_y_center = dest_y_bottom - self.DISK_HEIGHT / 2
-        target_cable_len = dest_y_center - self.TRAVEL_Y - self.crane.trolley_height
+        disk_top_y = dest_y_bottom - self.DISK_HEIGHT
+        target_cable_len = disk_top_y - self.TRAVEL_Y - self.crane.trolley_height - self.crane.magnet_height
         def on_returned():
-            self.selected_disk.pos_x = dest_x; self.selected_disk.pos_y = dest_y_bottom
             self.selected_disk = None; self.source_peg = None; self.game_state = 'IDLE'; self.update_lcd_status()
-        def on_detach(): self.selected_disk.attached_to = None; self.crane.set_magnet(False); self.crane.set_hoist_length(self.crane.min_cable_length, callback=on_returned)
+        def on_detach():
+            self.selected_disk.pos_x = dest_x
+            self.selected_disk.pos_y = dest_y_bottom
+            self.selected_disk.attached_to = None
+            self.crane.set_magnet(False)
+            self.crane.set_hoist_length(self.crane.min_cable_length, callback=on_returned)
         def on_lower(): self.crane.set_hoist_length(target_cable_len, callback=on_detach)
         self.crane.move_to((dest_x, self.TRAVEL_Y), callback=on_lower)
 
@@ -401,10 +487,10 @@ class RecursionSimulation:
         from_peg, to_peg = move['from'], move['to']
         disk = self.visual_pegs[from_peg][-1]
         source_x = self.peg_coords[from_peg]; dest_x = self.peg_coords[to_peg]
-        source_y_center = self.FLOOR_Y - ((len(self.visual_pegs[from_peg]) - 1) * self.DISK_HEIGHT) - self.DISK_HEIGHT / 2
-        dest_y_center = self.FLOOR_Y - (len(self.visual_pegs[to_peg]) * self.DISK_HEIGHT) - self.DISK_HEIGHT / 2
-        pickup_cable_len = source_y_center - self.TRAVEL_Y - self.crane.trolley_height
-        place_cable_len = dest_y_center - self.TRAVEL_Y - self.crane.trolley_height
+        source_disk_top_y = self.FLOOR_Y - ((len(self.visual_pegs[from_peg]) - 1) * self.DISK_HEIGHT) - self.DISK_HEIGHT
+        dest_disk_top_y = self.FLOOR_Y - (len(self.visual_pegs[to_peg]) * self.DISK_HEIGHT) - self.DISK_HEIGHT
+        pickup_cable_len = source_disk_top_y - self.TRAVEL_Y - self.crane.trolley_height - self.crane.magnet_height
+        place_cable_len = dest_disk_top_y - self.TRAVEL_Y - self.crane.trolley_height - self.crane.magnet_height
         def on_raised_final(): self.process_next_auto_move()
         def on_placed():
             disk.pos_x = dest_x; disk.pos_y = self.FLOOR_Y - (len(self.visual_pegs[to_peg]) * self.DISK_HEIGHT)
@@ -430,11 +516,52 @@ class RecursionSimulation:
         self.btn_load.handle_event(event)
         self.btn_solve.handle_event(event)
         self.btn_reset.handle_event(event)
+        self.btn_speed_up.handle_event(event)
+        self.btn_speed_down.handle_event(event)
 
     def update(self):
         if self.show_win_manifest: return
-        self.all_sprites.update()
+        self.all_sprites.update(self.speed_multiplier)
         self.lcd.update()
+
+    def draw_hover_effects(self):
+        if self.game_state != 'DISK_SELECTED' or not self.selected_disk: return
+
+        mouse_pos = pygame.mouse.get_pos()
+        for peg, rect in self.peg_rects.items():
+            if rect.collidepoint(mouse_pos):
+                # Determine validity
+                is_valid = True
+                if self.visual_pegs[peg]:
+                    if self.selected_disk.value > self.visual_pegs[peg][-1].value:
+                        is_valid = False
+                
+                # Hologram Color
+                holo_color = (0, 255, 255) if is_valid else (255, 50, 50)
+                
+                # Calculate Position
+                peg_x = self.peg_coords[peg]
+                dest_y = self.FLOOR_Y - (len(self.visual_pegs[peg]) * self.DISK_HEIGHT)
+                
+                # Draw the hologram rect
+                w, h = self.selected_disk.width, self.selected_disk.height
+                ghost_rect = pygame.Rect(0, 0, w, h)
+                ghost_rect.midbottom = (peg_x, dest_y)
+                
+                # Draw fill
+                s = pygame.Surface((w, h), pygame.SRCALPHA)
+                pygame.draw.rect(s, (*holo_color, 80), (0,0,w,h), border_radius=4)
+                pygame.draw.rect(s, (*holo_color, 200), (0,0,w,h), 2, border_radius=4)
+                
+                # Scanline effect for hologram
+                for i in range(0, h, 4):
+                    pygame.draw.line(s, (*holo_color, 50), (0, i), (w, i), 1)
+                
+                self.screen.blit(s, ghost_rect)
+                
+                # Draw guide line from top
+                pygame.draw.line(self.screen, (*holo_color, 100), (peg_x, self.TRAVEL_Y + 30), (peg_x, ghost_rect.top), 1)
+                pygame.draw.circle(self.screen, holo_color, (peg_x, ghost_rect.top), 2)
 
     def draw_win_manifest(self):
         overlay = pygame.Surface((self.SIM_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA); overlay.fill((0, 0, 0, 180))
@@ -464,9 +591,11 @@ class RecursionSimulation:
 
     def draw(self):
         self.screen.blit(self.background, (0, 0))
+        self.draw_hover_effects()
         self.disks.draw(self.screen)
         self.screen.blit(self.crane.image, self.crane.rect)
         self.chassis.draw(self.screen); self.lcd.draw(self.screen)
         self.btn_load.draw(self.screen); self.btn_solve.draw(self.screen); self.btn_reset.draw(self.screen)
+        self.btn_speed_up.draw(self.screen); self.btn_speed_down.draw(self.screen)
         if self.show_win_manifest:
             self.draw_win_manifest()
