@@ -1,5 +1,5 @@
 PROJECT: Full Stack Logistics Simulator
-VERSION: 1.0 (Gold Master)
+VERSION: 1.1 (Audio Update)
 THEME: Industrial Visualization of Data Structures (Warehouse Management System)
 ENGINE: Python 3.x / Pygame Community Edition
 
@@ -9,9 +9,9 @@ as realistic logistics operations. The project uses a "Sim-Style" aesthetic,
 rendering procedural assets (trucks, cargo, environment, buildings) entirely via code.
 
 The experience begins at the "Facility Overview," a dynamic, procedurally generated 
-industrial park at night, featuring real-time lighting and mechanical animations. 
-Users "uplink" to specific facilities to interact with the underlying algorithms 
-via a rugged handheld scanner interface.
+industrial park at night, featuring real-time lighting, mechanical animations, and 
+an adaptive procedural soundtrack. Users "uplink" to specific facilities to interact 
+with the underlying algorithms via a rugged handheld scanner interface.
 
 CONTROLS:
 - Mouse: Interact with UI, Select Slots, Hover over Facilities.
@@ -58,7 +58,8 @@ Full_Stack_Sim/
 ├── settings.py                  # Config, Palettes, Physics Constants
 ├── core/                        # Shared Engine Code
 │   ├── sprites.py               # Procedural Asset Generators (Trucks, Crates)
-│   └── ui.py                    # Rugged UI System (Scanner, Buttons)
+│   ├── ui.py                    # Rugged UI System (Scanner, Buttons)
+│   └── sound_engine.py          # Procedural Audio Synthesizer & Sequencer
 └── simulation/                  # Level Logic & Visualization
     ├── site_parking_stack.py    # Stack Logic
     ├── site_parking_queue.py    # Queue Logic
