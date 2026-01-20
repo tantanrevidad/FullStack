@@ -1,67 +1,74 @@
 PROJECT: Full Stack Logistics Simulator
+VERSION: 1.0 (Gold Master)
 THEME: Industrial Visualization of Data Structures (Warehouse Management System)
-ENGINE: Python 3.x / Pygame
+ENGINE: Python 3.x / Pygame Community Edition
 
 DESCRIPTION:
-A visualization tool that represents computer science data structures as 
-realistic logistics operations. The project uses a "Sim-Style" aesthetic,
-rendering high-detail procedural assets (trucks, cargo, environment) entirely
-via code.
+A high-fidelity visualization tool that represents computer science data structures 
+as realistic logistics operations. The project uses a "Sim-Style" aesthetic, 
+rendering procedural assets (trucks, cargo, environment, buildings) entirely via code.
 
-The interface mimics a rugged industrial handheld scanner (WMS Unit), 
-providing an immersive way to interact with the algorithms.
+The experience begins at the "Facility Overview," a dynamic, procedurally generated 
+industrial park at night, featuring real-time lighting and mechanical animations. 
+Users "uplink" to specific facilities to interact with the underlying algorithms 
+via a rugged handheld scanner interface.
 
-CURRENT MODULES:
+CONTROLS:
+- Mouse: Interact with UI, Select Slots, Hover over Facilities.
+- Keyboard: Type values into the scanner.
+- F11: Toggle Full Screen Mode.
 
-1. LEVEL 1 - THE VERTICAL PARKING BAY (STACK)
-   - Logic: LIFO (Last In, First Out).
-   - Setting: A rugged maintenance hangar with textured asphalt floors.
-   - Metaphor: A narrow bay where the last truck in blocks the exit.
-   - Animation: Blocking trucks automatically "shuffle" to a holding zone to 
-     release the target vehicle.
-   - Feature: "Skip Animation" button instantly synchronizes the visual state
-     with the logical data structure.
+MODULES (FACILITIES):
 
-2. LEVEL 2 - THE WEIGH STATION (QUEUE)
-   - Logic: FIFO (First In, First Out).
-   - Setting: High-detail Industrial Yard (Asphalt, Fences, Shipping Containers).
-   - Metaphor: A highway weigh station.
-   - Animation: If a truck in the middle needs to leave, the trucks in front 
-     drive out, take a "U-Turn Loopback Road," and rejoin the back of the line.
-   - Logic Update: Trucks looping back count as a new Arrival and Departure.
+1. STACK TOWER (LIFO Operations)
+   - Logic: Last-In, First-Out stack management.
+   - Visuals: Vertical parking bay with hydraulic lifts and holding zones.
 
-3. LEVEL 3 - THE CONVEYOR BELT (LINKED LIST)
+2. WEIGH STATION (FIFO Queue)
+   - Logic: First-In, First-Out queue with loopback cycling.
+   - Visuals: Industrial yard with animated conveyor lanes and traffic control.
+
+3. CONVEYOR BELT (Linked List)
    - Logic: Singly Linked List (Insert/Remove at Index).
-   - Setting: An atmospheric factory floor with an animated conveyor belt,
-     textured concrete, and volumetric lighting effects ("god rays").
-   - Metaphor: Boxes on a conveyor represent nodes, linked by a logical chain.
-   - Animation: To insert a box, the user clicks a slot, subsequent boxes shift
-     to create a gap, and the new box drops from a central hopper.
+   - Visuals: Factory floor with volumetric lighting and animated belts.
+
+4. ROUTING HUB (Binary Search Tree)
+   - Logic: BST Insertion and Traversal (In/Pre/Post-order).
+   - Visuals: Automated warehouse with drone-based package routing.
+
+5. PARSER LAB (Expression Tree)
+   - Logic: Shunting-yard algorithm for parsing mathematical expressions.
+   - Visuals: High-tech analysis floor with processing grids.
+
+6. SORTING YARD (Algorithms)
+   - Logic: Bubble, Selection, Insertion, Merge, and Quick Sort.
+   - Visuals: Large-scale gantry crane operations with container manipulation.
+
+7. RECURSION LAB (Tower of Hanoi)
+   - Logic: Recursive problem solving (Manual & Auto-Solve).
+   - Visuals: Magnetic crane moving disks between platforms.
+
+8. SMART RACK (Array Storage)
+   - Logic: Fixed-size Array (O(1) Read vs O(n) Write).
+   - Visuals: Multi-level pallet racking with industrial forklift physics.
 
 DIRECTORY STRUCTURE:
 Full_Stack_Sim/
-├── main.py                   # Entry Point (Main Menu & Scene Switcher)
-├── settings.py               # Config, Palettes (Industrial/Retro LCD), Physics
-├── assets/                   # (Optional) Folder for custom overrides
-├── core/                     # Shared Engine Code
-│   ├── sprites.py            # Procedural Asset Generators (Trucks, Boxes, Labels)
-│   └── ui.py                 # Rugged UI System (Handheld Chassis, LCD, Round Buttons)
-└── simulation/               # Level Logic
-    ├── site_parking_stack.py # Level 1: Stack Logic (Interior)
-    ├── site_parking_queue.py # Level 2: Queue Logic (Exterior Yard)
-    └── site_conveyor_list.py # Level 3: Linked List Logic (Conveyor)
+├── main.py                      # Entry Point (Facility Overview & State Machine)
+├── settings.py                  # Config, Palettes, Physics Constants
+├── core/                        # Shared Engine Code
+│   ├── sprites.py               # Procedural Asset Generators (Trucks, Crates)
+│   └── ui.py                    # Rugged UI System (Scanner, Buttons)
+└── simulation/                  # Level Logic & Visualization
+    ├── site_parking_stack.py    # Stack Logic
+    ├── site_parking_queue.py    # Queue Logic
+    ├── site_conveyor_list.py    # Linked List Logic
+    ├── site_router_tree.py      # BST Logic
+    ├── site_expression_tree.py  # Expression Tree Logic
+    ├── site_sorting_floor.py    # Sorting Logic
+    ├── site_recursion_lab.py    # Recursion Logic
+    └── site_warehouse_array.py  # Array Logic
 
 HOW TO RUN:
 1. Ensure Python 3.x and Pygame are installed (`pip install pygame`).
 2. Run: `python main.py`
-3. Select a Module from the Main Menu.
-
-CONTROLS (HANDHELD UNIT):
-- LCD Screen: Type Label/ID (e.g., "TRK-123" or "BOX-A").
-- GREEN BUTTON (APPEND/ARRIVE): Adds an item to the structure.
-- BLUE BUTTON (INSERT AT): For Linked List, enters "Placement Mode".
-- RED BUTTON (REMOVE/DEPART): Removes an item by its Label/ID.
-- BLUE BUTTON (MANIFEST): Toggles the inventory report overlay.
-- GRAY BUTTON (SKIP ANIM): Instantly finishes all active animations and snaps
-  sprites to their logical positions.
-
